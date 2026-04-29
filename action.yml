@@ -97,6 +97,26 @@ inputs:
     description: 'Keep Docker images (skip docker system prune -af)'
     required: false
     default: 'false'
+  enable_llvm:
+    description: 'Keep LLVM toolchains (/usr/lib/llvm-*) — includes llvm-16, llvm-17, llvm-18 (~1.9 GB)'
+    required: false
+    default: 'false'
+  enable_mysql:
+    description: 'Keep MySQL data directory (/var/lib/mysql) (~180 MB). The service is stopped before data removal.'
+    required: false
+    default: 'false'
+  enable_postgresql:
+    description: 'Keep PostgreSQL data directory (/var/lib/postgresql) (~39 MB). The service is stopped before data removal.'
+    required: false
+    default: 'false'
+  enable_mecab:
+    description: 'Keep MeCab data (/var/lib/mecab) (~91 MB, Japanese morphological analyzer)'
+    required: false
+    default: 'false'
+  enable_apt_cache:
+    description: 'Keep apt package cache (/var/cache/apt) (~238 MB). When false, runs apt-get clean.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -253,6 +273,35 @@ runs:
       if: inputs.enable_docker != 'true'
       shell: bash
       run: docker system prune -af 2>/dev/null || true
+
+    - name: Remove LLVM toolchains
+      if: inputs.enable_llvm != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/lib/llvm-*
+
+    - name: Remove MySQL
+      if: inputs.enable_mysql != 'true'
+      shell: bash
+      run: |
+        sudo systemctl stop mysql 2>/dev/null || true
+        sudo rm -rf /var/lib/mysql
+
+    - name: Remove PostgreSQL
+      if: inputs.enable_postgresql != 'true'
+      shell: bash
+      run: |
+        sudo systemctl stop postgresql 2>/dev/null || true
+        sudo rm -rf /var/lib/postgresql
+
+    - name: Remove MeCab data
+      if: inputs.enable_mecab != 'true'
+      shell: bash
+      run: sudo rm -rf /var/lib/mecab
+
+    - name: Clean apt package cache
+      if: inputs.enable_apt_cache != 'true'
+      shell: bash
+      run: sudo apt-get clean
 
     # ── Disk space report (after) ─────────────────────────────────────────────
     - name: Report disk space after cleanup

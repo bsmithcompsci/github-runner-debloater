@@ -49,6 +49,11 @@ GitHub's `ubuntu-latest` runner ships with a large collection of compilers, runt
 | `enable_julia` | `false` | Keep Julia |
 | `enable_codeql` | `false` | Keep CodeQL |
 | `enable_docker` | `false` | Keep Docker images (skip `docker system prune -af`) |
+| `enable_llvm` | `false` | Keep LLVM toolchains (`/usr/lib/llvm-*` — llvm-16, llvm-17, llvm-18) |
+| `enable_mysql` | `false` | Keep MySQL data directory (`/var/lib/mysql`) |
+| `enable_postgresql` | `false` | Keep PostgreSQL data directory (`/var/lib/postgresql`) |
+| `enable_mecab` | `false` | Keep MeCab data (`/var/lib/mecab`) |
+| `enable_apt_cache` | `false` | Keep apt package cache (when false, runs `apt-get clean` to clear `/var/cache/apt`) |
 
 ---
 
