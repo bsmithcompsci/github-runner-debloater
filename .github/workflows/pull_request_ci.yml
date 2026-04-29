@@ -71,16 +71,17 @@ jobs:
 
   # ── 4. Scenario: Python project ──────────────────────────────────────────
   test-python-project:
-    name: 'Test: Python project (keep python)'
+    name: 'Test: Python project (keep python + miniconda)'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run debloater keeping Python
+      - name: Run debloater keeping Python and Miniconda
         uses: ./
         with:
           enable_python: 'true'
+          enable_miniconda: 'true'
 
       - name: Verify Python is still available
         run: python3 --version
@@ -172,3 +173,76 @@ jobs:
             exit 1
           fi
           echo "✅ Dependency check correctly rejected chromium without google"
+
+  # ── 10. Cross-dependency error: miniconda without python ─────────────────
+  test-miniconda-requires-python:
+    name: 'Test: Miniconda without Python must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (miniconda=true, python=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_miniconda: 'true'
+          enable_python: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_miniconda=true and enable_python=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected miniconda without python"
+
+  # ── 11. Cross-dependency error: pipx without python ──────────────────────
+  test-pipx-requires-python:
+    name: 'Test: pipx without Python must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (pipx=true, python=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_pipx: 'true'
+          enable_python: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_pipx=true and enable_python=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected pipx without python"
+
+  # ── 12. Cross-dependency error: pypy without python ──────────────────────
+  test-pypy-requires-python:
+    name: 'Test: PyPy without Python must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (pypy=true, python=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_pypy: 'true'
+          enable_python: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_pypy=true and enable_python=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected pypy without python"
+

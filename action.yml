@@ -34,7 +34,25 @@ inputs:
     required: false
     default: 'false'
   enable_python:
-    description: 'Keep Python tools: miniconda, pipx, PyPy (/usr/share/miniconda, /opt/pipx, /opt/hostedtoolcache/PyPy)'
+    description: 'Keep base Python toolchain cache (/opt/hostedtoolcache/Python). Required by enable_miniconda, enable_pipx, and enable_pypy.'
+    required: false
+    default: 'false'
+  enable_miniconda:
+    description: >
+      Keep Miniconda (/usr/share/miniconda).
+      REQUIRES enable_python=true — Miniconda is a Python distribution.
+    required: false
+    default: 'false'
+  enable_pipx:
+    description: >
+      Keep pipx (/opt/pipx).
+      REQUIRES enable_python=true — pipx installs and runs Python applications.
+    required: false
+    default: 'false'
+  enable_pypy:
+    description: >
+      Keep PyPy runtime (/opt/hostedtoolcache/PyPy).
+      REQUIRES enable_python=true — PyPy is an alternative Python runtime.
     required: false
     default: 'false'
   enable_ruby:
@@ -92,6 +110,21 @@ runs:
 
         if [[ "${{ inputs.enable_chromium }}" == "true" && "${{ inputs.enable_google }}" != "true" ]]; then
           echo "::error::enable_chromium=true requires enable_google=true. Chromium is a Google product and its tooling lives inside /opt/google and /usr/lib/google-cloud-sdk."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_miniconda }}" == "true" && "${{ inputs.enable_python }}" != "true" ]]; then
+          echo "::error::enable_miniconda=true requires enable_python=true. Miniconda is a Python distribution and depends on the base Python toolchain."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_pipx }}" == "true" && "${{ inputs.enable_python }}" != "true" ]]; then
+          echo "::error::enable_pipx=true requires enable_python=true. pipx installs and runs Python applications and depends on the base Python toolchain."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_pypy }}" == "true" && "${{ inputs.enable_python }}" != "true" ]]; then
+          echo "::error::enable_pypy=true requires enable_python=true. PyPy is an alternative Python runtime and depends on the base Python toolchain."
           ERROR=1
         fi
 
@@ -159,13 +192,25 @@ runs:
       shell: bash
       run: sudo rm -rf /usr/local/julia*
 
-    - name: Remove Python tools (miniconda, pipx, PyPy)
+    - name: Remove base Python toolchain cache
       if: inputs.enable_python != 'true'
       shell: bash
-      run: |
-        sudo rm -rf /usr/share/miniconda
-        sudo rm -rf /opt/pipx
-        sudo rm -rf /opt/hostedtoolcache/PyPy
+      run: sudo rm -rf /opt/hostedtoolcache/Python
+
+    - name: Remove Miniconda
+      if: inputs.enable_miniconda != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/miniconda
+
+    - name: Remove pipx
+      if: inputs.enable_pipx != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/pipx
+
+    - name: Remove PyPy
+      if: inputs.enable_pypy != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/PyPy
 
     - name: Remove Google Cloud SDK and /opt/google
       if: inputs.enable_google != 'true'

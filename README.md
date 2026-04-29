@@ -35,17 +35,20 @@ GitHub's `ubuntu-latest` runner ships with a large collection of compilers, runt
 | `enable_swift` | `false` | Keep Swift compiler |
 | `enable_java` | `false` | Keep Java JVM |
 | `enable_node` | `false` | Keep Node.js |
-| `enable_python` | `false` | Keep Python tools (miniconda, pipx, PyPy) |
+| `enable_python` | `false` | Keep base Python toolchain cache — **root for all Python add-ons below** |
+| `enable_miniconda` | `false` | Keep Miniconda (**requires `enable_python: 'true'`**) |
+| `enable_pipx` | `false` | Keep pipx (**requires `enable_python: 'true'`**) |
+| `enable_pypy` | `false` | Keep PyPy runtime (**requires `enable_python: 'true'`**) |
 | `enable_ruby` | `false` | Keep Ruby |
 | `enable_go` | `false` | Keep Go toolchain |
-| `enable_google` | `false` | Keep Google tools (Google Cloud SDK, /opt/google) |
+| `enable_google` | `false` | Keep Google tools (Google Cloud SDK, /opt/google) — **root for Chromium** |
 | `enable_chromium` | `false` | Keep Chromium browser (**requires `enable_google: 'true'`**) |
 | `enable_microsoft` | `false` | Keep Microsoft tools (/opt/microsoft) |
 | `enable_azure` | `false` | Keep Azure CLI |
 | `enable_powershell` | `false` | Keep PowerShell |
 | `enable_julia` | `false` | Keep Julia |
 | `enable_codeql` | `false` | Keep CodeQL |
-| `enable_docker` | `false` | Skip Docker image pruning (`docker system prune -af`) |
+| `enable_docker` | `false` | Keep Docker images (skip `docker system prune -af`) |
 
 ---
 
@@ -55,11 +58,17 @@ Some tools depend on others being present on the runner. The action validates in
 
 | Input | Requires |
 |---|---|
+| `enable_miniconda: 'true'` | `enable_python: 'true'` |
+| `enable_pipx: 'true'` | `enable_python: 'true'` |
+| `enable_pypy: 'true'` | `enable_python: 'true'` |
 | `enable_chromium: 'true'` | `enable_google: 'true'` |
 
-**Example error**
+**Example errors**
 
 ```
+Error: enable_miniconda=true requires enable_python=true.
+Miniconda is a Python distribution and depends on the base Python toolchain.
+
 Error: enable_chromium=true requires enable_google=true.
 Chromium is a Google product and its tooling lives inside
 /opt/google and /usr/lib/google-cloud-sdk.
@@ -84,12 +93,22 @@ Chromium is a Google product and its tooling lives inside
     enable_node: 'true'
 ```
 
-### Python project
+### Python project (base only)
 
 ```yaml
 - uses: bsmithcompsci/github-runner-debloater@v1
   with:
     enable_python: 'true'
+```
+
+### Python project with Miniconda and pipx
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_python: 'true'
+    enable_miniconda: 'true'
+    enable_pipx: 'true'
 ```
 
 ### Go project
