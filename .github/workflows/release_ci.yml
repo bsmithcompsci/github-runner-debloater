@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: release-ci
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Create Release
@@ -21,7 +25,13 @@ jobs:
       - name: Determine latest semver tag
         id: get_tag
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG="v0.0.0"
+          while IFS= read -r TAG; do
+            if [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              LATEST_TAG="${TAG}"
+              break
+            fi
+          done < <(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname)
           echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
           echo "Latest tag: ${LATEST_TAG}"
 
@@ -43,6 +53,35 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "${{ steps.next_version.outputs.new_tag }}"
           git push origin "${{ steps.next_version.outputs.new_tag }}"
+
+      - name: Update major and minor version tags
+        run: |
+          NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
+          VERSION="${NEW_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${VERSION}"
+
+          MAJOR_TAG="v${MAJOR}"
+          MINOR_TAG="v${MAJOR}.${MINOR}"
+
+          git tag -f "${MAJOR_TAG}" "${NEW_TAG}"
+          git tag -f "${MINOR_TAG}" "${NEW_TAG}"
+
+          push_version_tag() {
+            local tag="$1"
+            local expected
+            expected="$(git ls-remote --tags origin "refs/tags/${tag}" | awk '{print $1}')"
+
+            if [ -n "${expected}" ]; then
+              git push --force-with-lease="refs/tags/${tag}:${expected}" origin "refs/tags/${tag}"
+            else
+              git push origin "refs/tags/${tag}"
+            fi
+          }
+
+          push_version_tag "${MAJOR_TAG}"
+          push_version_tag "${MINOR_TAG}"
+
+          echo "Updated ${MAJOR_TAG} and ${MINOR_TAG} to ${NEW_TAG}"
 
       - name: Create GitHub Release
         uses: actions/github-script@v7
