@@ -118,9 +118,13 @@ inputs:
     required: false
     default: 'false'
   verbose:
-    description: 'Print detailed per-directory disk usage (depth 5) before and after cleanup. A freed-space summary is always printed regardless of this setting.'
+    description: 'When true, print detailed disk usage reports before and after cleanup.'
     required: false
     default: 'false'
+  verbose-depth:
+    description: 'When verbose=true, set the depth for the disk usage report (default: 2).'
+    required: false
+    default: '2'
 
 runs:
   using: 'composite'

@@ -36,6 +36,9 @@ jobs:
 
       - name: Run debloater with all defaults
         uses: ./
+        with:
+          verbose: 'true'
+          verbose-depth: '5'
 
       - name: Verify disk space meets baseline
         run: |
