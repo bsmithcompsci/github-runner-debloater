@@ -39,19 +39,19 @@ jobs:
 
       - name: Verify disk space meets baseline
         run: |
-          BASELINE_GB=$(jq -r '.minimum_free_gb' metrics/baseline.json)
+          BASELINE_GB=$(jq -r '.maximum_used_gb' metrics/baseline.json)
 
-          AVAILABLE_KB=$(df / --output=avail | tail -1)
-          AVAILABLE_GB=$(( AVAILABLE_KB / 1024 / 1024 ))
+          USED_KB=$(df / --output=used | tail -1)
+          USED_GB=$(( USED_KB / 1024 / 1024 ))
 
-          echo "Free disk space : ${AVAILABLE_GB} GB"
-          echo "Baseline minimum: ${BASELINE_GB} GB"
+          echo "Used disk space : ${USED_GB} GB"
+          echo "Baseline maximum: ${BASELINE_GB} GB"
 
-          if [ "${AVAILABLE_GB}" -lt "${BASELINE_GB}" ]; then
-            echo "::error::Disk space ${AVAILABLE_GB} GB is below baseline ${BASELINE_GB} GB"
+          if [ "${USED_GB}" -gt "${BASELINE_GB}" ]; then
+            echo "::error::Disk usage ${USED_GB} GB exceeds baseline maximum ${BASELINE_GB} GB"
             exit 1
           fi
-          echo "✅ Disk space check passed (${AVAILABLE_GB} GB >= ${BASELINE_GB} GB)"
+          echo "✅ Disk space check passed, Usage: ${USED_GB} GB <= ${BASELINE_GB} GB"
 
   # ── 3. Scenario: Node.js project ─────────────────────────────────────────
   test-node-project:
