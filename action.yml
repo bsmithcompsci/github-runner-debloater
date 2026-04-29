@@ -76,7 +76,7 @@ inputs:
     required: false
     default: 'false'
   enable_docker:
-    description: 'Skip Docker image pruning (docker system prune -af)'
+    description: 'Keep Docker images (skip docker system prune -af)'
     required: false
     default: 'false'
 
@@ -87,6 +87,7 @@ runs:
     - name: Validate input dependencies
       shell: bash
       run: |
+        # All inputs are passed as strings by GitHub Actions ("true" / "false").
         ERROR=0
 
         if [[ "${{ inputs.enable_chromium }}" == "true" && "${{ inputs.enable_google }}" != "true" ]]; then

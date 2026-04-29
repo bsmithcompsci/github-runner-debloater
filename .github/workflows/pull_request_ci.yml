@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+# Minimal permissions — jobs only need to checkout code.
+permissions:
+  contents: read
+
 jobs:
   # ── 1. Validate the action definition with actionlint ──────────────────────
   validate:

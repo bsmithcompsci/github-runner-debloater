@@ -1,6 +1,6 @@
 {
   "description": "Minimum expected free disk space after a full cleanup run on ubuntu-latest GitHub-hosted runners.",
-  "notes": "The lowest measured value as of initial release: 19 GB available (26 % of total drive). The CI size-check test enforces this lower bound.",
+  "notes": "The lowest measured value as of initial release: 19 GB available (26% of total drive). The CI size-check test enforces this lower bound.",
   "minimum_free_gb": 19,
   "minimum_free_percent": 26
 }
