@@ -1,0 +1,216 @@
+name: 'GitHub Runner Debloater'
+description: >
+  Removes pre-installed but unused tools from GitHub-hosted ubuntu runners to reclaim disk space.
+  Set an "enable_*" input to "true" to keep that toolchain; everything else is removed by default.
+author: 'bsmithcompsci'
+
+branding:
+  icon: 'trash-2'
+  color: 'red'
+
+inputs:
+  enable_dotnet:
+    description: 'Keep .NET SDK/runtime (/usr/share/dotnet)'
+    required: false
+    default: 'false'
+  enable_android:
+    description: 'Keep Android SDK (/usr/local/lib/android)'
+    required: false
+    default: 'false'
+  enable_ghc:
+    description: 'Keep GHC Haskell compiler (/opt/ghc, /usr/local/.ghcup)'
+    required: false
+    default: 'false'
+  enable_swift:
+    description: 'Keep Swift compiler (/usr/share/swift)'
+    required: false
+    default: 'false'
+  enable_java:
+    description: 'Keep Java JVM (/usr/lib/jvm)'
+    required: false
+    default: 'false'
+  enable_node:
+    description: 'Keep Node.js (/opt/hostedtoolcache/node)'
+    required: false
+    default: 'false'
+  enable_python:
+    description: 'Keep Python tools: miniconda, pipx, PyPy (/usr/share/miniconda, /opt/pipx, /opt/hostedtoolcache/PyPy)'
+    required: false
+    default: 'false'
+  enable_ruby:
+    description: 'Keep Ruby (/opt/hostedtoolcache/Ruby)'
+    required: false
+    default: 'false'
+  enable_go:
+    description: 'Keep Go (/opt/hostedtoolcache/go)'
+    required: false
+    default: 'false'
+  enable_google:
+    description: 'Keep Google tools: Google Cloud SDK, /opt/google (/usr/lib/google-cloud-sdk, /opt/google)'
+    required: false
+    default: 'false'
+  enable_chromium:
+    description: >
+      Keep Chromium browser (/usr/local/share/chromium).
+      REQUIRES enable_google=true — Chromium depends on Google tooling.
+    required: false
+    default: 'false'
+  enable_microsoft:
+    description: 'Keep Microsoft tools (/opt/microsoft)'
+    required: false
+    default: 'false'
+  enable_azure:
+    description: 'Keep Azure CLI (/opt/az, /usr/share/az_*)'
+    required: false
+    default: 'false'
+  enable_powershell:
+    description: 'Keep PowerShell (/usr/local/share/powershell)'
+    required: false
+    default: 'false'
+  enable_julia:
+    description: 'Keep Julia (/usr/local/julia*)'
+    required: false
+    default: 'false'
+  enable_codeql:
+    description: 'Keep CodeQL (/opt/hostedtoolcache/CodeQL)'
+    required: false
+    default: 'false'
+  enable_docker:
+    description: 'Skip Docker image pruning (docker system prune -af)'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    # ── Cross-dependency validation ───────────────────────────────────────────
+    - name: Validate input dependencies
+      shell: bash
+      run: |
+        ERROR=0
+
+        if [[ "${{ inputs.enable_chromium }}" == "true" && "${{ inputs.enable_google }}" != "true" ]]; then
+          echo "::error::enable_chromium=true requires enable_google=true. Chromium is a Google product and its tooling lives inside /opt/google and /usr/lib/google-cloud-sdk."
+          ERROR=1
+        fi
+
+        if [ "${ERROR}" -ne 0 ]; then
+          exit 1
+        fi
+
+    # ── Disk space report (before) ────────────────────────────────────────────
+    - name: Report disk space before cleanup
+      shell: bash
+      run: |
+        echo "=== Disk space before cleanup ==="
+        df -h
+        echo ""
+        echo "=== Top space users in /usr (depth 2) ==="
+        sudo du -h -d 2 /usr 2>/dev/null | sort -hr | head -20 || true
+        echo ""
+        echo "=== Top space users in /opt (depth 2) ==="
+        sudo du -h -d 2 /opt 2>/dev/null | sort -hr | head -20 || true
+        echo ""
+        echo "=== Top space users in /var (depth 2) ==="
+        sudo du -h -d 2 /var 2>/dev/null | sort -hr | head -10 || true
+        echo ""
+
+    # ── Removal steps ─────────────────────────────────────────────────────────
+    - name: Remove .NET
+      if: inputs.enable_dotnet != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/dotnet
+
+    - name: Remove Android SDK
+      if: inputs.enable_android != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/lib/android
+
+    - name: Remove GHC / GHCup (Haskell)
+      if: inputs.enable_ghc != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/.ghcup
+
+    - name: Remove Swift
+      if: inputs.enable_swift != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/swift
+
+    - name: Remove Java (JVM)
+      if: inputs.enable_java != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/lib/jvm
+
+    - name: Remove PowerShell
+      if: inputs.enable_powershell != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/share/powershell
+
+    - name: Remove Chromium
+      if: inputs.enable_chromium != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/share/chromium
+
+    - name: Remove Julia
+      if: inputs.enable_julia != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/julia*
+
+    - name: Remove Python tools (miniconda, pipx, PyPy)
+      if: inputs.enable_python != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/share/miniconda
+        sudo rm -rf /opt/pipx
+        sudo rm -rf /opt/hostedtoolcache/PyPy
+
+    - name: Remove Google Cloud SDK and /opt/google
+      if: inputs.enable_google != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/lib/google-cloud-sdk
+        sudo rm -rf /opt/google
+
+    - name: Remove Azure CLI
+      if: inputs.enable_azure != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/az /usr/share/az_*
+
+    - name: Remove Microsoft tools
+      if: inputs.enable_microsoft != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/microsoft
+
+    - name: Remove CodeQL
+      if: inputs.enable_codeql != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+    - name: Remove Go toolchain cache
+      if: inputs.enable_go != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/go
+
+    - name: Remove Node.js toolchain cache
+      if: inputs.enable_node != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/node
+
+    - name: Remove Ruby toolchain cache
+      if: inputs.enable_ruby != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/Ruby
+
+    - name: Prune Docker images and containers
+      if: inputs.enable_docker != 'true'
+      shell: bash
+      run: docker system prune -af 2>/dev/null || true
+
+    # ── Disk space report (after) ─────────────────────────────────────────────
+    - name: Report disk space after cleanup
+      shell: bash
+      run: |
+        echo "=== Disk space after cleanup ==="
+        df -h
