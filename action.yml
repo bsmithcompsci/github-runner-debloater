@@ -1,7 +1,7 @@
 name: 'GitHub Runner Debloater'
 description: >
   Removes pre-installed but unused tools from GitHub-hosted ubuntu runners to reclaim disk space.
-  Set an "enable_*" input to "true" to keep that toolchain; everything else is removed by default.
+  Easily configurable, by default full cleanup.
 author: 'bsmithcompsci'
 
 branding:
