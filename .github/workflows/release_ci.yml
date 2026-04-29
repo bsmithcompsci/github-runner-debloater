@@ -35,8 +35,28 @@ jobs:
           echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
           echo "Latest tag: ${LATEST_TAG}"
 
+      - name: Check whether action.yml changed
+        id: action_changed
+        run: |
+          LATEST="${{ steps.get_tag.outputs.latest_tag }}"
+
+          if [[ "${LATEST}" == "v0.0.0" ]]; then
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+            echo "No prior semver release found; action.yml will be released."
+            exit 0
+          fi
+
+          if git diff --quiet "${LATEST}..HEAD" -- action.yml; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "action.yml has not changed since ${LATEST}; skipping release."
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+            echo "action.yml changed since ${LATEST}; release will be created."
+          fi
+
       - name: Compute next patch version
         id: next_version
+        if: steps.action_changed.outputs.changed == 'true'
         run: |
           LATEST="${{ steps.get_tag.outputs.latest_tag }}"
           # Strip leading 'v'
@@ -48,6 +68,7 @@ jobs:
           echo "Next tag: ${NEW_TAG}"
 
       - name: Create and push tag
+        if: steps.action_changed.outputs.changed == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -55,6 +76,7 @@ jobs:
           git push origin "${{ steps.next_version.outputs.new_tag }}"
 
       - name: Update major and minor version tags
+        if: steps.action_changed.outputs.changed == 'true'
         run: |
           NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
           VERSION="${NEW_TAG#v}"
@@ -84,6 +106,7 @@ jobs:
           echo "Updated ${MAJOR_TAG} and ${MINOR_TAG} to ${NEW_TAG}"
 
       - name: Create GitHub Release
+        if: steps.action_changed.outputs.changed == 'true'
         uses: actions/github-script@v7
         with:
           script: |
