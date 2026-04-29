@@ -54,6 +54,7 @@ GitHub's `ubuntu-latest` runner ships with a large collection of compilers, runt
 | `enable_postgresql` | `false` | Keep PostgreSQL data directory (`/var/lib/postgresql`) |
 | `enable_mecab` | `false` | Keep MeCab data (`/var/lib/mecab`) |
 | `enable_apt_cache` | `false` | Keep apt package cache (when false, runs `apt-get clean` to clear `/var/cache/apt`) |
+| `verbose` | `false` | Print detailed per-directory disk usage (depth 5) before and after cleanup. A freed-space summary is always printed. |
 
 ---
 

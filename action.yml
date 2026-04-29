@@ -117,6 +117,10 @@ inputs:
     description: 'Keep apt package cache (/var/cache/apt) (~238 MB). When false, runs apt-get clean.'
     required: false
     default: 'false'
+  verbose:
+    description: 'Print detailed per-directory disk usage (depth 5) before and after cleanup. A freed-space summary is always printed regardless of this setting.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -156,18 +160,24 @@ runs:
     - name: Report disk space before cleanup
       shell: bash
       run: |
-        echo "=== Disk space before cleanup ==="
-        df -h
-        echo ""
-        echo "=== Top space users in /usr (depth 2) ==="
-        sudo du -h -d 2 /usr 2>/dev/null | sort -hr | head -20 || true
-        echo ""
-        echo "=== Top space users in /opt (depth 2) ==="
-        sudo du -h -d 2 /opt 2>/dev/null | sort -hr | head -20 || true
-        echo ""
-        echo "=== Top space users in /var (depth 2) ==="
-        sudo du -h -d 2 /var 2>/dev/null | sort -hr | head -10 || true
-        echo ""
+        # Always record used space so the after-step can compute freed space.
+        BEFORE_USED_KB=$(df --output=used / | tail -1 | tr -d ' ')
+        echo "${BEFORE_USED_KB}" > /tmp/debloater_before_used_kb
+
+        if [[ "${{ inputs.verbose }}" == "true" ]]; then
+          echo "=== Disk space before cleanup ==="
+          df -h
+          echo ""
+          echo "=== Top space users in /usr (depth 5) ==="
+          sudo du -h -d 5 /usr 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /opt (depth 5) ==="
+          sudo du -h -d 5 /opt 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /var (depth 5) ==="
+          sudo du -h -d 5 /var 2>/dev/null | sort -hr | head -20 || true
+          echo ""
+        fi
 
     # ── Removal steps ─────────────────────────────────────────────────────────
     - name: Remove .NET
@@ -307,5 +317,29 @@ runs:
     - name: Report disk space after cleanup
       shell: bash
       run: |
-        echo "=== Disk space after cleanup ==="
-        df -h
+        if [[ "${{ inputs.verbose }}" == "true" ]]; then
+          echo "=== Disk space after cleanup ==="
+          df -h
+          echo ""
+          echo "=== Top space users in /usr (depth 5) ==="
+          sudo du -h -d 5 /usr 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /opt (depth 5) ==="
+          sudo du -h -d 5 /opt 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /var (depth 5) ==="
+          sudo du -h -d 5 /var 2>/dev/null | sort -hr | head -20 || true
+          echo ""
+        fi
+
+        # Always print the freed-space summary.
+        AFTER_USED_KB=$(df --output=used / | tail -1 | tr -d ' ')
+        BEFORE_USED_KB=$(cat /tmp/debloater_before_used_kb 2>/dev/null || echo "${AFTER_USED_KB}")
+        FREED_KB=$(( BEFORE_USED_KB - AFTER_USED_KB ))
+        FREED_GB=$(awk "BEGIN { printf \"%.2f\", ${FREED_KB} / 1048576 }")
+        AFTER_FREE_KB=$(df --output=avail / | tail -1 | tr -d ' ')
+        AFTER_FREE_GB=$(awk "BEGIN { printf \"%.2f\", ${AFTER_FREE_KB} / 1048576 }")
+        echo "=== Cleanup summary ==="
+        echo "  Space freed : ${FREED_GB} GB"
+        echo "  Free space  : ${AFTER_FREE_GB} GB available on /"
+        rm -f /tmp/debloater_before_used_kb
