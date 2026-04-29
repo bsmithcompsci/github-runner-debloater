@@ -1,0 +1,114 @@
+name: Monthly Runner Size Check
+
+on:
+  schedule:
+    # Run at 12:00 UTC on the first day of each month.
+    - cron: '0 12 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-runner-size:
+    name: Check runner size drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Capture runner size before cleanup
+        run: |
+          mkdir -p metrics/monthly-runner-size
+
+          BEFORE_USED_KB=$(df --output=used / | tail -1 | tr -d ' ')
+          BEFORE_AVAIL_KB=$(df --output=avail / | tail -1 | tr -d ' ')
+          BEFORE_SIZE_KB=$(df --output=size / | tail -1 | tr -d ' ')
+
+          {
+            echo "before_used_kb=${BEFORE_USED_KB}"
+            echo "before_avail_kb=${BEFORE_AVAIL_KB}"
+            echo "before_size_kb=${BEFORE_SIZE_KB}"
+          } >> "${GITHUB_ENV}"
+
+          df -h / > metrics/monthly-runner-size/df-before.txt
+          sudo du -h -d 2 /usr 2>/dev/null | sort -hr | head -80 > metrics/monthly-runner-size/usr-before.txt || true
+          sudo du -h -d 2 /opt 2>/dev/null | sort -hr | head -80 > metrics/monthly-runner-size/opt-before.txt || true
+          sudo du -h -d 2 /var 2>/dev/null | sort -hr | head -80 > metrics/monthly-runner-size/var-before.txt || true
+
+      - name: Run full cleanup
+        uses: ./
+        with:
+          verbose: 'true'
+          verbose-depth: '5'
+
+      - name: Compare against baseline
+        run: |
+          BASELINE_GB=$(jq -r '.maximum_used_gb' metrics/baseline.json)
+
+          AFTER_USED_KB=$(df --output=used / | tail -1 | tr -d ' ')
+          AFTER_AVAIL_KB=$(df --output=avail / | tail -1 | tr -d ' ')
+          AFTER_SIZE_KB=$(df --output=size / | tail -1 | tr -d ' ')
+
+          BEFORE_USED_GB=$(awk "BEGIN { printf \"%.2f\", ${before_used_kb} / 1048576 }")
+          BEFORE_AVAIL_GB=$(awk "BEGIN { printf \"%.2f\", ${before_avail_kb} / 1048576 }")
+          AFTER_USED_GB=$(awk "BEGIN { printf \"%.2f\", ${AFTER_USED_KB} / 1048576 }")
+          AFTER_AVAIL_GB=$(awk "BEGIN { printf \"%.2f\", ${AFTER_AVAIL_KB} / 1048576 }")
+          FREED_GB=$(awk "BEGIN { printf \"%.2f\", (${before_used_kb} - ${AFTER_USED_KB}) / 1048576 }")
+          DELTA_FROM_BASELINE_GB=$(awk "BEGIN { printf \"%.2f\", ${AFTER_USED_GB} - ${BASELINE_GB} }")
+
+          df -h / > metrics/monthly-runner-size/df-after.txt
+          sudo du -h -d 2 /usr 2>/dev/null | sort -hr | head -80 > metrics/monthly-runner-size/usr-after.txt || true
+          sudo du -h -d 2 /opt 2>/dev/null | sort -hr | head -80 > metrics/monthly-runner-size/opt-after.txt || true
+          sudo du -h -d 2 /var 2>/dev/null | sort -hr | head -80 > metrics/monthly-runner-size/var-after.txt || true
+
+          cat > metrics/monthly-runner-size/report.md <<EOF
+          # Monthly Runner Size Check
+
+          Runner: \`${{ runner.os }}\`
+          Image: \`${ImageOS:-unknown} ${ImageVersion:-unknown}\`
+          Workflow run: \`${{ github.run_id }}\`
+
+          | Metric | Value |
+          |---|---:|
+          | Baseline max used after cleanup | ${BASELINE_GB} GB |
+          | Used before cleanup | ${BEFORE_USED_GB} GB |
+          | Free before cleanup | ${BEFORE_AVAIL_GB} GB |
+          | Used after cleanup | ${AFTER_USED_GB} GB |
+          | Free after cleanup | ${AFTER_AVAIL_GB} GB |
+          | Freed by cleanup | ${FREED_GB} GB |
+          | Delta from baseline | ${DELTA_FROM_BASELINE_GB} GB |
+          EOF
+
+          cat > metrics/monthly-runner-size/metrics.json <<EOF
+          {
+            "baseline_maximum_used_gb": ${BASELINE_GB},
+            "before_used_gb": ${BEFORE_USED_GB},
+            "before_available_gb": ${BEFORE_AVAIL_GB},
+            "after_used_gb": ${AFTER_USED_GB},
+            "after_available_gb": ${AFTER_AVAIL_GB},
+            "freed_gb": ${FREED_GB},
+            "delta_from_baseline_gb": ${DELTA_FROM_BASELINE_GB},
+            "before_used_kb": ${before_used_kb},
+            "before_available_kb": ${before_avail_kb},
+            "before_size_kb": ${before_size_kb},
+            "after_used_kb": ${AFTER_USED_KB},
+            "after_available_kb": ${AFTER_AVAIL_KB},
+            "after_size_kb": ${AFTER_SIZE_KB}
+          }
+          EOF
+
+          cat metrics/monthly-runner-size/report.md >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "$(awk "BEGIN { print (${AFTER_USED_GB} > ${BASELINE_GB}) }")" -eq 1 ]; then
+            echo "::error::Post-cleanup disk usage ${AFTER_USED_GB} GB exceeds baseline maximum ${BASELINE_GB} GB. Review the uploaded report and adjust metrics/baseline.json if the runner image changed legitimately."
+            exit 1
+          fi
+
+      - name: Upload runner size report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-runner-size-report
+          path: metrics/monthly-runner-size/
