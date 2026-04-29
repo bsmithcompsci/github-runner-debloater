@@ -88,7 +88,8 @@ Chromium is a Google product and its tooling lives inside
 
 ```yaml
 - uses: bsmithcompsci/github-runner-debloater@v1
-  # nothing enabled → all pre-installed runtimes removed
+  with:
+    enable_llvm: 'true'
 ```
 
 ### Node.js project
