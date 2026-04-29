@@ -4,6 +4,8 @@
 
 GitHub's `ubuntu-latest` runner ships with a large collection of compilers, runtimes, and SDKs (Node, Python, Go, Java, .NET, Android SDK, …). If your project only needs one or two of them, the rest is wasted space. This action lets you declare what you need; everything else is removed.
 
+Note, this is definitely a band-aid fix to your issue. A lot of this can be avoided, if you self-host, manage your own containers etc.
+
 ---
 
 ## Usage
