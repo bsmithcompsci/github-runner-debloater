@@ -1,0 +1,88 @@
+name: Release CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (full history for tag detection)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine latest semver tag
+        id: get_tag
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "latest_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "Latest tag: ${LATEST_TAG}"
+
+      - name: Compute next patch version
+        id: next_version
+        run: |
+          LATEST="${{ steps.get_tag.outputs.latest_tag }}"
+          # Strip leading 'v'
+          VERSION="${LATEST#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${VERSION}"
+          PATCH=$(( PATCH + 1 ))
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_tag=${NEW_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "Next tag: ${NEW_TAG}"
+
+      - name: Create and push tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.next_version.outputs.new_tag }}"
+          git push origin "${{ steps.next_version.outputs.new_tag }}"
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag  = '${{ steps.next_version.outputs.new_tag }}';
+            const repo = context.repo;
+
+            // Build a simple changelog from commits since the previous tag
+            const previousTag = '${{ steps.get_tag.outputs.latest_tag }}';
+            let body = `## What's Changed\n\n`;
+
+            if (previousTag !== 'v0.0.0') {
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({
+                owner: repo.owner,
+                repo:  repo.repo,
+                basehead: `${previousTag}...${tag}`,
+              });
+              const commits = comparison.data.commits;
+              if (commits.length > 0) {
+                body += commits
+                  .map(c => `- ${c.commit.message.split('\n')[0]} (${c.sha.slice(0, 7)})`)
+                  .join('\n');
+              } else {
+                body += '_No new commits._';
+              }
+            } else {
+              body += '_Initial release._';
+            }
+
+            body += `\n\n**Full Changelog**: https://github.com/${repo.owner}/${repo.repo}/commits/${tag}`;
+
+            await github.rest.repos.createRelease({
+              owner:      repo.owner,
+              repo:       repo.repo,
+              tag_name:   tag,
+              name:       `Release ${tag}`,
+              body:       body,
+              draft:      false,
+              prerelease: false,
+            });
+
+            console.log(`Created release ${tag}`);

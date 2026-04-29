@@ -1,0 +1,5 @@
+{
+  "description": "Maximum expected used disk space after a full cleanup run on ubuntu-latest GitHub-hosted runners.",
+  "notes": "The highest measured value as of initial release: 18 GB used. The CI size-check test enforces this upper bound.",
+  "maximum_used_gb": 19
+}

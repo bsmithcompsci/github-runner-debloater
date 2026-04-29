@@ -1,0 +1,251 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+# Minimal permissions — jobs only need to checkout code.
+permissions:
+  contents: read
+
+jobs:
+  # ── 1. Validate the action definition with actionlint ──────────────────────
+  validate:
+    name: Validate Action (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+            | bash -s -- latest /usr/local/bin
+
+      - name: Run actionlint
+        run: actionlint -color
+
+  # ── 2. Minimal cleanup — all defaults, remove everything ──────────────────
+  test-minimal:
+    name: 'Test: Minimal (remove all)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater with all defaults
+        uses: ./
+        with:
+          verbose: 'true'
+          verbose-depth: '5'
+
+      - name: Verify disk space meets baseline
+        run: |
+          BASELINE_GB=$(jq -r '.maximum_used_gb' metrics/baseline.json)
+
+          USED_KB=$(df / --output=used | tail -1)
+          USED_GB=$(( USED_KB / 1024 / 1024 ))
+
+          echo "Used disk space : ${USED_GB} GB"
+          echo "Baseline maximum: ${BASELINE_GB} GB"
+
+          if [ "${USED_GB}" -gt "${BASELINE_GB}" ]; then
+            echo "::error::Disk usage ${USED_GB} GB exceeds baseline maximum ${BASELINE_GB} GB"
+            exit 1
+          fi
+          echo "✅ Disk space check passed, Usage: ${USED_GB} GB <= ${BASELINE_GB} GB"
+
+  # ── 3. Scenario: Node.js project ─────────────────────────────────────────
+  test-node-project:
+    name: 'Test: Node.js project (keep node)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Node.js
+        uses: ./
+        with:
+          enable_node: 'true'
+
+      - name: Verify Node.js is still available
+        run: node --version
+
+  # ── 4. Scenario: Python project ──────────────────────────────────────────
+  test-python-project:
+    name: 'Test: Python project (keep python + miniconda)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Python and Miniconda
+        uses: ./
+        with:
+          enable_python: 'true'
+          enable_miniconda: 'true'
+
+      - name: Verify Python is still available
+        run: python3 --version
+
+  # ── 5. Scenario: Go project ──────────────────────────────────────────────
+  test-go-project:
+    name: 'Test: Go project (keep go)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Go
+        uses: ./
+        with:
+          enable_go: 'true'
+
+      - name: Verify Go is still available
+        run: go version
+
+  # ── 6. Scenario: .NET project ────────────────────────────────────────────
+  test-dotnet-project:
+    name: 'Test: .NET project (keep dotnet)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping .NET
+        uses: ./
+        with:
+          enable_dotnet: 'true'
+
+      - name: Verify .NET is still available
+        run: dotnet --version
+
+  # ── 7. Scenario: Ruby project ────────────────────────────────────────────
+  test-ruby-project:
+    name: 'Test: Ruby project (keep ruby)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Ruby
+        uses: ./
+        with:
+          enable_ruby: 'true'
+
+      - name: Verify Ruby is still available
+        run: ruby --version
+
+  # ── 8. Scenario: Java project ────────────────────────────────────────────
+  test-java-project:
+    name: 'Test: Java project (keep java)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Java
+        uses: ./
+        with:
+          enable_java: 'true'
+
+      - name: Verify Java is still available
+        run: java -version
+
+  # ── 9. Cross-dependency error: chromium without google ───────────────────
+  test-chromium-requires-google:
+    name: 'Test: Chromium without Google must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (chromium=true, google=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_chromium: 'true'
+          enable_google: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_chromium=true and enable_google=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected chromium without google"
+
+  # ── 10. Cross-dependency error: miniconda without python ─────────────────
+  test-miniconda-requires-python:
+    name: 'Test: Miniconda without Python must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (miniconda=true, python=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_miniconda: 'true'
+          enable_python: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_miniconda=true and enable_python=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected miniconda without python"
+
+  # ── 11. Cross-dependency error: pipx without python ──────────────────────
+  test-pipx-requires-python:
+    name: 'Test: pipx without Python must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (pipx=true, python=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_pipx: 'true'
+          enable_python: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_pipx=true and enable_python=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected pipx without python"
+
+  # ── 12. Cross-dependency error: pypy without python ──────────────────────
+  test-pypy-requires-python:
+    name: 'Test: PyPy without Python must fail'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (pypy=true, python=false) — expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_pypy: 'true'
+          enable_python: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_pypy=true and enable_python=false, but it succeeded."
+            exit 1
+          fi
+          echo "✅ Dependency check correctly rejected pypy without python"
+

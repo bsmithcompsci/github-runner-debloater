@@ -1,0 +1,349 @@
+name: 'GitHub Runner Debloater'
+description: >
+  Removes pre-installed but unused tools from GitHub-hosted ubuntu runners to reclaim disk space.
+  Set an "enable_*" input to "true" to keep that toolchain; everything else is removed by default.
+author: 'bsmithcompsci'
+
+branding:
+  icon: 'trash-2'
+  color: 'red'
+
+inputs:
+  enable_dotnet:
+    description: 'Keep .NET SDK/runtime (/usr/share/dotnet)'
+    required: false
+    default: 'false'
+  enable_android:
+    description: 'Keep Android SDK (/usr/local/lib/android)'
+    required: false
+    default: 'false'
+  enable_ghc:
+    description: 'Keep GHC Haskell compiler (/opt/ghc, /usr/local/.ghcup)'
+    required: false
+    default: 'false'
+  enable_swift:
+    description: 'Keep Swift compiler (/usr/share/swift)'
+    required: false
+    default: 'false'
+  enable_java:
+    description: 'Keep Java JVM (/usr/lib/jvm)'
+    required: false
+    default: 'false'
+  enable_node:
+    description: 'Keep Node.js (/opt/hostedtoolcache/node)'
+    required: false
+    default: 'false'
+  enable_python:
+    description: 'Keep base Python toolchain cache (/opt/hostedtoolcache/Python). Required by enable_miniconda, enable_pipx, and enable_pypy.'
+    required: false
+    default: 'false'
+  enable_miniconda:
+    description: >
+      Keep Miniconda (/usr/share/miniconda).
+      REQUIRES enable_python=true — Miniconda is a Python distribution.
+    required: false
+    default: 'false'
+  enable_pipx:
+    description: >
+      Keep pipx (/opt/pipx).
+      REQUIRES enable_python=true — pipx installs and runs Python applications.
+    required: false
+    default: 'false'
+  enable_pypy:
+    description: >
+      Keep PyPy runtime (/opt/hostedtoolcache/PyPy).
+      REQUIRES enable_python=true — PyPy is an alternative Python runtime.
+    required: false
+    default: 'false'
+  enable_ruby:
+    description: 'Keep Ruby (/opt/hostedtoolcache/Ruby)'
+    required: false
+    default: 'false'
+  enable_go:
+    description: 'Keep Go (/opt/hostedtoolcache/go)'
+    required: false
+    default: 'false'
+  enable_google:
+    description: 'Keep Google tools: Google Cloud SDK, /opt/google (/usr/lib/google-cloud-sdk, /opt/google)'
+    required: false
+    default: 'false'
+  enable_chromium:
+    description: >
+      Keep Chromium browser (/usr/local/share/chromium).
+      REQUIRES enable_google=true — Chromium depends on Google tooling.
+    required: false
+    default: 'false'
+  enable_microsoft:
+    description: 'Keep Microsoft tools (/opt/microsoft)'
+    required: false
+    default: 'false'
+  enable_azure:
+    description: 'Keep Azure CLI (/opt/az, /usr/share/az_*)'
+    required: false
+    default: 'false'
+  enable_powershell:
+    description: 'Keep PowerShell (/usr/local/share/powershell)'
+    required: false
+    default: 'false'
+  enable_julia:
+    description: 'Keep Julia (/usr/local/julia*)'
+    required: false
+    default: 'false'
+  enable_codeql:
+    description: 'Keep CodeQL (/opt/hostedtoolcache/CodeQL)'
+    required: false
+    default: 'false'
+  enable_docker:
+    description: 'Keep Docker images (skip docker system prune -af)'
+    required: false
+    default: 'false'
+  enable_llvm:
+    description: 'Keep LLVM toolchains (/usr/lib/llvm-*) — includes llvm-16, llvm-17, llvm-18 (~1.9 GB)'
+    required: false
+    default: 'false'
+  enable_mysql:
+    description: 'Keep MySQL data directory (/var/lib/mysql) (~180 MB). The service is stopped before data removal.'
+    required: false
+    default: 'false'
+  enable_postgresql:
+    description: 'Keep PostgreSQL data directory (/var/lib/postgresql) (~39 MB). The service is stopped before data removal.'
+    required: false
+    default: 'false'
+  enable_mecab:
+    description: 'Keep MeCab data (/var/lib/mecab) (~91 MB, Japanese morphological analyzer)'
+    required: false
+    default: 'false'
+  enable_apt_cache:
+    description: 'Keep apt package cache (/var/cache/apt) (~238 MB). When false, runs apt-get clean.'
+    required: false
+    default: 'false'
+  verbose:
+    description: 'When true, print detailed disk usage reports before and after cleanup.'
+    required: false
+    default: 'false'
+  verbose-depth:
+    description: 'When verbose=true, set the depth for the disk usage report (default: 2).'
+    required: false
+    default: '2'
+
+runs:
+  using: 'composite'
+  steps:
+    # ── Cross-dependency validation ───────────────────────────────────────────
+    - name: Validate input dependencies
+      shell: bash
+      run: |
+        # All inputs are passed as strings by GitHub Actions ("true" / "false").
+        ERROR=0
+
+        if [[ "${{ inputs.enable_chromium }}" == "true" && "${{ inputs.enable_google }}" != "true" ]]; then
+          echo "::error::enable_chromium=true requires enable_google=true. Chromium is a Google product and its tooling lives inside /opt/google and /usr/lib/google-cloud-sdk."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_miniconda }}" == "true" && "${{ inputs.enable_python }}" != "true" ]]; then
+          echo "::error::enable_miniconda=true requires enable_python=true. Miniconda is a Python distribution and depends on the base Python toolchain."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_pipx }}" == "true" && "${{ inputs.enable_python }}" != "true" ]]; then
+          echo "::error::enable_pipx=true requires enable_python=true. pipx installs and runs Python applications and depends on the base Python toolchain."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_pypy }}" == "true" && "${{ inputs.enable_python }}" != "true" ]]; then
+          echo "::error::enable_pypy=true requires enable_python=true. PyPy is an alternative Python runtime and depends on the base Python toolchain."
+          ERROR=1
+        fi
+
+        if [ "${ERROR}" -ne 0 ]; then
+          exit 1
+        fi
+
+    # ── Disk space report (before) ────────────────────────────────────────────
+    - name: Report disk space before cleanup
+      shell: bash
+      run: |
+        # Always record used space so the after-step can compute freed space.
+        BEFORE_USED_KB=$(df --output=used / | tail -1 | tr -d ' ')
+        echo "${BEFORE_USED_KB}" > /tmp/debloater_before_used_kb
+
+        if [[ "${{ inputs.verbose }}" == "true" ]]; then
+          echo "=== Disk space before cleanup ==="
+          df -h
+          echo ""
+          echo "=== Top space users in /usr (depth 5) ==="
+          sudo du -h -d 5 /usr 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /opt (depth 5) ==="
+          sudo du -h -d 5 /opt 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /var (depth 5) ==="
+          sudo du -h -d 5 /var 2>/dev/null | sort -hr | head -20 || true
+          echo ""
+        fi
+
+    # ── Removal steps ─────────────────────────────────────────────────────────
+    - name: Remove .NET
+      if: inputs.enable_dotnet != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/dotnet
+
+    - name: Remove Android SDK
+      if: inputs.enable_android != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/lib/android
+
+    - name: Remove GHC / GHCup (Haskell)
+      if: inputs.enable_ghc != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/.ghcup
+
+    - name: Remove Swift
+      if: inputs.enable_swift != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/swift
+
+    - name: Remove Java (JVM)
+      if: inputs.enable_java != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/lib/jvm
+
+    - name: Remove PowerShell
+      if: inputs.enable_powershell != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/share/powershell
+
+    - name: Remove Chromium
+      if: inputs.enable_chromium != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/share/chromium
+
+    - name: Remove Julia
+      if: inputs.enable_julia != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/julia*
+
+    - name: Remove base Python toolchain cache
+      if: inputs.enable_python != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/Python
+
+    - name: Remove Miniconda
+      if: inputs.enable_miniconda != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/miniconda
+
+    - name: Remove pipx
+      if: inputs.enable_pipx != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/pipx
+
+    - name: Remove PyPy
+      if: inputs.enable_pypy != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/PyPy
+
+    - name: Remove Google Cloud SDK and /opt/google
+      if: inputs.enable_google != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/lib/google-cloud-sdk
+        sudo rm -rf /opt/google
+
+    - name: Remove Azure CLI
+      if: inputs.enable_azure != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/az /usr/share/az_*
+
+    - name: Remove Microsoft tools
+      if: inputs.enable_microsoft != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/microsoft
+
+    - name: Remove CodeQL
+      if: inputs.enable_codeql != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+    - name: Remove Go toolchain cache
+      if: inputs.enable_go != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/go
+
+    - name: Remove Node.js toolchain cache
+      if: inputs.enable_node != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/node
+
+    - name: Remove Ruby toolchain cache
+      if: inputs.enable_ruby != 'true'
+      shell: bash
+      run: sudo rm -rf /opt/hostedtoolcache/Ruby
+
+    - name: Prune Docker images and containers
+      if: inputs.enable_docker != 'true'
+      shell: bash
+      run: docker system prune -af 2>/dev/null || true
+
+    - name: Remove LLVM toolchains
+      if: inputs.enable_llvm != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/lib/llvm-*
+
+    - name: Remove MySQL
+      if: inputs.enable_mysql != 'true'
+      shell: bash
+      run: |
+        sudo systemctl stop mysql 2>/dev/null || true
+        sudo rm -rf /var/lib/mysql
+
+    - name: Remove PostgreSQL
+      if: inputs.enable_postgresql != 'true'
+      shell: bash
+      run: |
+        sudo systemctl stop postgresql 2>/dev/null || true
+        sudo rm -rf /var/lib/postgresql
+
+    - name: Remove MeCab data
+      if: inputs.enable_mecab != 'true'
+      shell: bash
+      run: sudo rm -rf /var/lib/mecab
+
+    - name: Clean apt package cache
+      if: inputs.enable_apt_cache != 'true'
+      shell: bash
+      run: sudo apt-get clean
+
+    # ── Disk space report (after) ─────────────────────────────────────────────
+    - name: Report disk space after cleanup
+      shell: bash
+      run: |
+        if [[ "${{ inputs.verbose }}" == "true" ]]; then
+          echo "=== Disk space after cleanup ==="
+          df -h
+          echo ""
+          echo "=== Top space users in /usr (depth 5) ==="
+          sudo du -h -d 5 /usr 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /opt (depth 5) ==="
+          sudo du -h -d 5 /opt 2>/dev/null | sort -hr | head -40 || true
+          echo ""
+          echo "=== Top space users in /var (depth 5) ==="
+          sudo du -h -d 5 /var 2>/dev/null | sort -hr | head -20 || true
+          echo ""
+        fi
+
+        # Always print the freed-space summary.
+        AFTER_USED_KB=$(df --output=used / | tail -1 | tr -d ' ')
+        BEFORE_USED_KB=$(cat /tmp/debloater_before_used_kb 2>/dev/null || echo "${AFTER_USED_KB}")
+        FREED_KB=$(( BEFORE_USED_KB - AFTER_USED_KB ))
+        FREED_GB=$(awk "BEGIN { printf \"%.2f\", ${FREED_KB} / 1048576 }")
+        AFTER_FREE_KB=$(df --output=avail / | tail -1 | tr -d ' ')
+        AFTER_FREE_GB=$(awk "BEGIN { printf \"%.2f\", ${AFTER_FREE_KB} / 1048576 }")
+        echo "=== Cleanup summary ==="
+        echo "  Space freed : ${FREED_GB} GB"
+        echo "  Free space  : ${AFTER_FREE_GB} GB available on /"
+        rm -f /tmp/debloater_before_used_kb
