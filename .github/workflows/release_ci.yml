@@ -36,9 +36,20 @@ jobs:
           persist-credentials: false
 
       - name: Report release app identity
-        run: |
-          echo "Release app slug: ${{ steps.release_app_token.outputs.app-slug }}"
-          echo "Release app installation: ${{ steps.release_app_token.outputs.installation-id }}"
+        id: release_app_identity
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.release_app_token.outputs.token }}
+          script: |
+            const appSlug = '${{ steps.release_app_token.outputs.app-slug }}';
+            const app = await github.request('GET /apps/{app_slug}', {
+              app_slug: appSlug,
+            });
+
+            core.setOutput('app_id', app.data.id);
+            core.notice(`Release app slug: ${appSlug}`);
+            core.notice(`Release app id: ${app.data.id}`);
+            core.notice(`Release app installation: ${{ steps.release_app_token.outputs.installation-id }}`);
 
       - name: Determine latest semver tag
         id: get_tag
@@ -126,6 +137,13 @@ jobs:
                 });
                 console.log(`Updated refs/${ref} to ${context.sha}`);
               } catch (error) {
+                if (error.status === 422 && error.message.includes('Repository rule violations')) {
+                  core.error(
+                    `GitHub rejected refs/${ref}. Confirm every active ruleset targeting refs/${ref} has a bypass actor ` +
+                    `with actor_type "Integration", actor_id "${{ steps.release_app_identity.outputs.app_id }}", and bypass_mode "always".`
+                  );
+                }
+
                 if (error.status !== 404) {
                   throw error;
                 }
