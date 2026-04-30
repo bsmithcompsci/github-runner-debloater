@@ -1,4 +1,5 @@
 # github-runner-debloater
+[![Release CI](https://github.com/bsmithcompsci/github-runner-debloater/actions/workflows/release_ci.yml/badge.svg)](https://github.com/bsmithcompsci/github-runner-debloater/actions/workflows/release_ci.yml)
 
 > **Reclaim disk space on GitHub-hosted ubuntu runners by removing the pre-installed tools your project doesn't need.**
 
