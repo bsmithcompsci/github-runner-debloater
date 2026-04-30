@@ -28,8 +28,32 @@ inputs:
     description: 'Keep Java JVM (/usr/lib/jvm)'
     required: false
     default: 'false'
+  enable_gcc:
+    description: 'Keep GCC compiler toolchain (/usr/bin/gcc*, /usr/lib/gcc)'
+    required: false
+    default: 'false'
   enable_node:
-    description: 'Keep Node.js (/opt/hostedtoolcache/node)'
+    description: 'Keep Node.js runtime (/opt/hostedtoolcache/node, /usr/local/bin/node). Required by enable_npm, enable_corepack, and enable_yarn.'
+    required: false
+    default: 'false'
+  enable_npm:
+    description: 'Keep npm and npx. REQUIRES enable_node=true.'
+    required: false
+    default: 'false'
+  enable_corepack:
+    description: 'Keep Corepack. REQUIRES enable_node=true.'
+    required: false
+    default: 'false'
+  enable_yarn:
+    description: 'Keep Yarn. REQUIRES enable_node=true.'
+    required: false
+    default: 'false'
+  enable_c:
+    description: 'Keep C headers (/usr/include). Required by enable_cpp.'
+    required: false
+    default: 'false'
+  enable_cpp:
+    description: 'Keep C++ compiler/frontend and headers (g++, /usr/include/c++). REQUIRES enable_c=true and enable_gcc=true.'
     required: false
     default: 'false'
   enable_python:
@@ -56,6 +80,10 @@ inputs:
     default: 'false'
   enable_ruby:
     description: 'Keep Ruby (/opt/hostedtoolcache/Ruby)'
+    required: false
+    default: 'false'
+  enable_perl:
+    description: 'Keep Perl runtime and libraries (/usr/bin/perl*, /usr/lib/*/perl, /usr/share/perl)'
     required: false
     default: 'false'
   enable_go:
@@ -116,6 +144,18 @@ inputs:
     description: 'Keep apt package cache (/var/cache/apt) (~238 MB). When false, runs apt-get clean.'
     required: false
     default: 'false'
+  enable_docs:
+    description: 'Keep package documentation (/usr/share/doc)'
+    required: false
+    default: 'false'
+  enable_locales:
+    description: 'Keep translation/localization files (/usr/share/locale)'
+    required: false
+    default: 'false'
+  enable_manpages:
+    description: 'Keep manual pages (/usr/share/man)'
+    required: false
+    default: 'false'
   verbose:
     description: 'When true, print detailed disk usage reports before and after cleanup.'
     required: false
@@ -137,6 +177,31 @@ runs:
 
         if [[ "${{ inputs.enable_chromium }}" == "true" && "${{ inputs.enable_google }}" != "true" ]]; then
           echo "::error::enable_chromium=true requires enable_google=true. Chromium is a Google product and its tooling lives inside /opt/google and /usr/lib/google-cloud-sdk."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_cpp }}" == "true" && "${{ inputs.enable_c }}" != "true" ]]; then
+          echo "::error::enable_cpp=true requires enable_c=true. The C++ toolchain depends on the base C headers."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_cpp }}" == "true" && "${{ inputs.enable_gcc }}" != "true" ]]; then
+          echo "::error::enable_cpp=true requires enable_gcc=true. The C++ compiler frontend depends on GCC internals."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_npm }}" == "true" && "${{ inputs.enable_node }}" != "true" ]]; then
+          echo "::error::enable_npm=true requires enable_node=true. npm and npx are Node.js package-management tools."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_corepack }}" == "true" && "${{ inputs.enable_node }}" != "true" ]]; then
+          echo "::error::enable_corepack=true requires enable_node=true. Corepack manages Node.js package-manager shims."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_yarn }}" == "true" && "${{ inputs.enable_node }}" != "true" ]]; then
+          echo "::error::enable_yarn=true requires enable_node=true. Yarn runs on Node.js."
           ERROR=1
         fi
 
@@ -225,10 +290,39 @@ runs:
       shell: bash
       run: sudo rm -rf /usr/local/julia*
 
+    - name: Remove C++ compiler/frontend and headers
+      if: inputs.enable_cpp != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/bin/g++* /usr/bin/c++ /usr/bin/*-linux-gnu-g++* /usr/bin/*-linux-gnu-c++ 2>/dev/null || true
+        sudo rm -rf /usr/include/c++ 2>/dev/null || true
+        sudo find /usr/lib/gcc -name cc1plus -delete 2>/dev/null || true
+
+    - name: Remove C headers
+      if: inputs.enable_c != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/include 2>/dev/null || true
+
+    - name: Remove GCC compiler toolchain
+      if: inputs.enable_gcc != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/bin/gcc* /usr/bin/cc /usr/bin/gcov* 2>/dev/null || true
+        sudo rm -rf /usr/bin/*-linux-gnu-gcc* /usr/bin/*-linux-gnu-gcov* 2>/dev/null || true
+        sudo rm -rf /usr/lib/gcc 2>/dev/null || true
+
     - name: Remove base Python toolchain cache
       if: inputs.enable_python != 'true'
       shell: bash
-      run: sudo rm -rf /opt/hostedtoolcache/Python
+      run: |
+        sudo rm -rf /opt/hostedtoolcache/Python
+        sudo rm -rf /usr/local/bin/python* /usr/local/bin/pydoc* 2>/dev/null || true
+        sudo rm -rf /usr/local/lib/python* 2>/dev/null || true
+        sudo rm -rf /usr/local/include/python* 2>/dev/null || true
+        sudo rm -rf /usr/local/share/python* 2>/dev/null || true
+        sudo rm -rf /usr/lib/python* 2>/dev/null || true
+        sudo rm -rf /usr/include/python* 2>/dev/null || true
+        sudo rm -rf /usr/share/python* 2>/dev/null || true
 
     - name: Remove Miniconda
       if: inputs.enable_miniconda != 'true'
@@ -272,15 +366,53 @@ runs:
       shell: bash
       run: sudo rm -rf /opt/hostedtoolcache/go
 
-    - name: Remove Node.js toolchain cache
+    - name: Remove npm and npx
+      if: inputs.enable_npm != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/bin/npm /usr/local/bin/npx 2>/dev/null || true
+        sudo rm -rf /usr/local/lib/node_modules/npm 2>/dev/null || true
+        sudo rm -rf /usr/local/share/man/man1/npm* /usr/local/share/man/man1/npx* 2>/dev/null || true
+        sudo find /opt/hostedtoolcache/node -path '*/lib/node_modules/npm' -prune -exec rm -rf {} + 2>/dev/null || true
+        sudo find /opt/hostedtoolcache/node -type f \( -name npm -o -name npx \) -delete 2>/dev/null || true
+
+    - name: Remove Corepack
+      if: inputs.enable_corepack != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/bin/corepack 2>/dev/null || true
+        sudo rm -rf /usr/local/lib/node_modules/corepack 2>/dev/null || true
+        sudo find /opt/hostedtoolcache/node -path '*/lib/node_modules/corepack' -prune -exec rm -rf {} + 2>/dev/null || true
+        sudo find /opt/hostedtoolcache/node -type f -name corepack -delete 2>/dev/null || true
+
+    - name: Remove Yarn
+      if: inputs.enable_yarn != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/bin/yarn /usr/local/bin/yarnpkg 2>/dev/null || true
+        sudo rm -rf /opt/yarn-v* 2>/dev/null || true
+
+    - name: Remove Node.js runtime
       if: inputs.enable_node != 'true'
       shell: bash
-      run: sudo rm -rf /opt/hostedtoolcache/node
+      run: |
+        sudo rm -rf /opt/hostedtoolcache/node
+        sudo rm -rf /usr/local/bin/node 2>/dev/null || true
+        sudo rm -rf /usr/local/include/node 2>/dev/null || true
+        sudo rm -rf /usr/local/share/man/man1/node* 2>/dev/null || true
 
     - name: Remove Ruby toolchain cache
       if: inputs.enable_ruby != 'true'
       shell: bash
       run: sudo rm -rf /opt/hostedtoolcache/Ruby
+
+    - name: Remove Perl runtime and libraries
+      if: inputs.enable_perl != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/bin/perl* 2>/dev/null || true
+        sudo rm -rf /usr/lib/*/perl /usr/share/perl /etc/perl 2>/dev/null || true
+        sudo rm -rf /usr/local/lib/*/perl /usr/local/share/perl 2>/dev/null || true
 
     - name: Prune Docker images and containers
       if: inputs.enable_docker != 'true'
@@ -315,6 +447,21 @@ runs:
       if: inputs.enable_apt_cache != 'true'
       shell: bash
       run: sudo apt-get clean
+
+    - name: Remove package documentation
+      if: inputs.enable_docs != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/doc
+
+    - name: Remove localization files
+      if: inputs.enable_locales != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/locale
+
+    - name: Remove manual pages
+      if: inputs.enable_manpages != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/share/man
 
     # ── Disk space report (after) ─────────────────────────────────────────────
     - name: Report disk space after cleanup
