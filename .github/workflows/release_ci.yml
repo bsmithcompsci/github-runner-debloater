@@ -81,6 +81,8 @@ jobs:
 
       - name: Create and push tag
         if: steps.action_changed.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.release_app_token.outputs.token }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -89,6 +91,8 @@ jobs:
 
       - name: Update major and minor version tags
         if: steps.action_changed.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.release_app_token.outputs.token }}
         run: |
           NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
           VERSION="${NEW_TAG#v}"
