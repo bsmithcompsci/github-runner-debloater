@@ -29,6 +29,7 @@ jobs:
   # ── 2. Minimal cleanup — all defaults, remove everything ──────────────────
   test-minimal:
     name: 'Test: Minimal (remove all)'
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,6 +40,52 @@ jobs:
         with:
           verbose: 'true'
           verbose-depth: '5'
+
+      - name: Verify default cleanup removed expected tool caches
+        run: |
+          REMAINING=0
+
+          assert_removed() {
+            local path="$1"
+
+            if compgen -G "${path}" > /dev/null; then
+              echo "::error::Expected ${path} to be removed, but it still exists."
+              REMAINING=1
+            else
+              echo "Removed: ${path}"
+            fi
+          }
+
+          assert_removed '/usr/share/dotnet'
+          assert_removed '/usr/local/lib/android'
+          assert_removed '/opt/ghc'
+          assert_removed '/usr/local/.ghcup'
+          assert_removed '/usr/share/swift'
+          assert_removed '/usr/lib/jvm'
+          assert_removed '/usr/local/share/powershell'
+          assert_removed '/usr/local/share/chromium'
+          assert_removed '/usr/local/julia*'
+          assert_removed '/opt/hostedtoolcache/Python'
+          assert_removed '/usr/share/miniconda'
+          assert_removed '/opt/pipx'
+          assert_removed '/opt/hostedtoolcache/PyPy'
+          assert_removed '/usr/lib/google-cloud-sdk'
+          assert_removed '/opt/google'
+          assert_removed '/opt/az'
+          assert_removed '/usr/share/az_*'
+          assert_removed '/opt/microsoft'
+          assert_removed '/opt/hostedtoolcache/CodeQL'
+          assert_removed '/opt/hostedtoolcache/go'
+          assert_removed '/opt/hostedtoolcache/node'
+          assert_removed '/opt/hostedtoolcache/Ruby'
+          assert_removed '/usr/lib/llvm-*'
+          assert_removed '/var/lib/mysql'
+          assert_removed '/var/lib/postgresql'
+          assert_removed '/var/lib/mecab'
+
+          if [ "${REMAINING}" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Verify disk space meets baseline
         run: |
@@ -59,6 +106,7 @@ jobs:
   # ── 3. Scenario: Node.js project ─────────────────────────────────────────
   test-node-project:
     name: 'Test: Node.js project (keep node)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -75,6 +123,7 @@ jobs:
   # ── 4. Scenario: Python project ──────────────────────────────────────────
   test-python-project:
     name: 'Test: Python project (keep python + miniconda)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -92,6 +141,7 @@ jobs:
   # ── 5. Scenario: Go project ──────────────────────────────────────────────
   test-go-project:
     name: 'Test: Go project (keep go)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -108,6 +158,7 @@ jobs:
   # ── 6. Scenario: .NET project ────────────────────────────────────────────
   test-dotnet-project:
     name: 'Test: .NET project (keep dotnet)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -124,6 +175,7 @@ jobs:
   # ── 7. Scenario: Ruby project ────────────────────────────────────────────
   test-ruby-project:
     name: 'Test: Ruby project (keep ruby)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -140,6 +192,7 @@ jobs:
   # ── 8. Scenario: Java project ────────────────────────────────────────────
   test-java-project:
     name: 'Test: Java project (keep java)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -156,6 +209,7 @@ jobs:
   # ── 9. Cross-dependency error: chromium without google ───────────────────
   test-chromium-requires-google:
     name: 'Test: Chromium without Google must fail'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -180,6 +234,7 @@ jobs:
   # ── 10. Cross-dependency error: miniconda without python ─────────────────
   test-miniconda-requires-python:
     name: 'Test: Miniconda without Python must fail'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -204,6 +259,7 @@ jobs:
   # ── 11. Cross-dependency error: pipx without python ──────────────────────
   test-pipx-requires-python:
     name: 'Test: pipx without Python must fail'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -228,6 +284,7 @@ jobs:
   # ── 12. Cross-dependency error: pypy without python ──────────────────────
   test-pypy-requires-python:
     name: 'Test: PyPy without Python must fail'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
