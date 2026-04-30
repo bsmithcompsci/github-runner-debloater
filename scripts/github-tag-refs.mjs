@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createSign } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 
 function parseArgs(argv) {
   const args = {};
@@ -142,6 +142,30 @@ function isRulesetError(error) {
   return error.status === 422 && error.body?.includes("Repository rule violations");
 }
 
+function parseSemverTag(tag) {
+  const match = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    tag,
+    major: Number.parseInt(match[1], 10),
+    minor: Number.parseInt(match[2], 10),
+    patch: Number.parseInt(match[3], 10),
+  };
+}
+
+function compareSemverTags(left, right) {
+  return right.major - left.major
+    || right.minor - left.minor
+    || right.patch - left.patch;
+}
+
+function isReferenceUpdateFailed(error) {
+  return error.status === 422 && error.body?.includes("Reference update failed");
+}
+
 function reportRulesetError({ error, fullRef, appId }) {
   if (!isRulesetError(error)) {
     return;
@@ -151,6 +175,15 @@ function reportRulesetError({ error, fullRef, appId }) {
     ? ` with actor_type "Integration", actor_id "${appId}", and bypass_mode "always"`
     : "";
   console.error(`GitHub rejected ${fullRef}. Confirm every active ruleset targeting ${fullRef} has a bypass actor${appHint}.`);
+}
+
+function reportCreateRefError({ error, fullRef }) {
+  if (isReferenceUpdateFailed(error)) {
+    console.error(
+      `GitHub refused to create ${fullRef}. If this tag name was previously attached to an immutable release, ` +
+      "GitHub can block reusing the tag name even after the ref is deleted."
+    );
+  }
 }
 
 class GitHubRefs {
@@ -175,6 +208,12 @@ class GitHubRefs {
       console.log(`Created ${fullRef} at ${sha}`);
     } catch (error) {
       reportRulesetError({ error, fullRef, appId: this.appId });
+      reportCreateRefError({ error, fullRef });
+      if (error.status === 422 && error.body?.includes("Reference already exists")) {
+        console.log(`${fullRef} already exists; leaving it unchanged`);
+        return;
+      }
+
       throw error;
     }
   }
@@ -200,16 +239,116 @@ class GitHubRefs {
       console.log(`${fullRef} did not exist`);
     }
   }
+
+  async latestSemverTag() {
+    const refs = await request({
+      method: "GET",
+      url: `${this.baseUrl}/matching-refs/${encodeURIComponent("tags/v")}`,
+      token: this.token,
+    });
+    const tags = refs
+      .map((ref) => ref.ref.replace(/^refs\/tags\//, ""))
+      .map(parseSemverTag)
+      .filter(Boolean)
+      .sort(compareSemverTags);
+
+    return tags[0]?.tag ?? "v0.0.0";
+  }
+
+  async createRelease({ tag, previousTag }) {
+    try {
+      await request({
+        method: "GET",
+        url: `https://api.github.com/repos/${this.owner}/${this.repo}/releases/tags/${encodeURIComponent(tag)}`,
+        token: this.token,
+      });
+      console.log(`Release ${tag} already exists; leaving it unchanged`);
+      return;
+    } catch (error) {
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
+
+    const body = previousTag && previousTag !== "v0.0.0"
+      ? `## What's Changed\n\n**Full Changelog**: https://github.com/${this.owner}/${this.repo}/compare/${previousTag}...${tag}`
+      : "## What's Changed\n\n_Initial release._";
+
+    await request({
+      method: "POST",
+      url: `https://api.github.com/repos/${this.owner}/${this.repo}/releases`,
+      token: this.token,
+      body: {
+        tag_name: tag,
+        name: `Release ${tag}`,
+        body,
+        draft: false,
+        prerelease: false,
+      },
+    });
+    console.log(`Created release ${tag}`);
+  }
 }
 
-function floatingTagsFor(tag) {
-  const match = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-  if (!match) {
+function floatingTagsFor(tag, selection = "major,minor") {
+  const version = parseSemverTag(tag);
+  if (!version) {
     throw new Error(`Expected semver tag like v1.2.3, got ${tag}`);
   }
 
-  const [, major, minor] = match;
-  return [`v${major}`, `v${major}.${minor}`];
+  const selected = new Set(selection.split(",").map((item) => item.trim()).filter(Boolean));
+  const tags = [];
+
+  if (selected.has("major")) {
+    tags.push(`v${version.major}`);
+  }
+
+  if (selected.has("minor")) {
+    tags.push(`v${version.major}.${version.minor}`);
+  }
+
+  if (tags.length === 0) {
+    throw new Error(`No floating tags selected by --floating-tags ${selection}`);
+  }
+
+  return tags;
+}
+
+function nextPatchTag(latestTag) {
+  const latest = parseSemverTag(latestTag);
+  if (!latest) {
+    throw new Error(`Cannot compute next patch version from non-semver tag ${latestTag}`);
+  }
+
+  return `v${latest.major}.${latest.minor}.${latest.patch + 1}`;
+}
+
+async function writeGithubOutput(name, value) {
+  if (!process.env.GITHUB_OUTPUT) {
+    return;
+  }
+
+  await appendFile(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+}
+
+async function publish({ refs, tag, sha, floatingTags, createRelease }) {
+  const latestTag = await refs.latestSemverTag();
+  const releaseTag = tag === "auto"
+    ? nextPatchTag(latestTag)
+    : tag;
+
+  console.log(`Publishing ${releaseTag} at ${sha}`);
+  await writeGithubOutput("release_tag", releaseTag);
+  await refs.createTag(releaseTag, sha);
+
+  for (const floatingTag of floatingTagsFor(releaseTag, floatingTags)) {
+    await refs.deleteTagIfExists(floatingTag);
+    await refs.createTag(floatingTag, sha);
+  }
+
+  if (createRelease) {
+    await refs.createRelease({ tag: releaseTag, previousTag: latestTag });
+  }
 }
 
 async function main() {
@@ -227,10 +366,21 @@ async function main() {
   }
 
   if (mode === "refresh-floating-tags") {
-    for (const floatingTag of floatingTagsFor(tag)) {
+    for (const floatingTag of floatingTagsFor(tag, args["floating-tags"])) {
       await refs.deleteTagIfExists(floatingTag);
       await refs.createTag(floatingTag, sha);
     }
+    return;
+  }
+
+  if (mode === "publish") {
+    await publish({
+      refs,
+      tag,
+      sha,
+      floatingTags: args["floating-tags"],
+      createRelease: args.release !== "false",
+    });
     return;
   }
 
@@ -249,14 +399,14 @@ async function main() {
     console.log(`Release tag: ${tag}`);
     console.log(`Target SHA: ${sha}`);
 
-    const tagsToClean = [tag, ...floatingTagsFor(tag)];
+    const tagsToClean = [tag, ...floatingTagsFor(tag, args["floating-tags"])];
     for (const tagToClean of tagsToClean) {
       await refs.deleteTagIfExists(tagToClean);
     }
 
     await refs.createTag(tag, sha);
 
-    for (const floatingTag of floatingTagsFor(tag)) {
+    for (const floatingTag of floatingTagsFor(tag, args["floating-tags"])) {
       await refs.deleteTagIfExists(floatingTag);
       await refs.createTag(floatingTag, sha);
     }
