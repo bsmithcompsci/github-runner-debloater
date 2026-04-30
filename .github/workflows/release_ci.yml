@@ -80,7 +80,7 @@ jobs:
         run: |
           NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
           VERSION="${NEW_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${VERSION}"
+          IFS='.' read -r MAJOR MINOR _PATCH <<< "${VERSION}"
 
           MAJOR_TAG="v${MAJOR}"
           MINOR_TAG="v${MAJOR}.${MINOR}"
