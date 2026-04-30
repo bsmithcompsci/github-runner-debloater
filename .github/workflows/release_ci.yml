@@ -82,17 +82,18 @@ jobs:
       - name: Create and push tag
         if: steps.action_changed.outputs.changed == 'true'
         env:
-          GITHUB_TOKEN: ${{ steps.release_app_token.outputs.token }}
+          RELEASE_APP_TOKEN: ${{ steps.release_app_token.outputs.token }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${RELEASE_APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git tag "${{ steps.next_version.outputs.new_tag }}"
           git push origin "${{ steps.next_version.outputs.new_tag }}"
 
       - name: Update major and minor version tags
         if: steps.action_changed.outputs.changed == 'true'
         env:
-          GITHUB_TOKEN: ${{ steps.release_app_token.outputs.token }}
+          RELEASE_APP_TOKEN: ${{ steps.release_app_token.outputs.token }}
         run: |
           NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
           VERSION="${NEW_TAG#v}"
@@ -103,6 +104,8 @@ jobs:
 
           git tag -f "${MAJOR_TAG}" "${NEW_TAG}"
           git tag -f "${MINOR_TAG}" "${NEW_TAG}"
+
+          git remote set-url origin "https://x-access-token:${RELEASE_APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           push_version_tag() {
             local tag="$1"
