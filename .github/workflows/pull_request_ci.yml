@@ -586,6 +586,8 @@ jobs:
         uses: ./
         with:
           enable_node: 'true'
+          verbose: 'true'
+          verbose-depth: '5'
 
       - name: Verify container keep behavior
         run: |
