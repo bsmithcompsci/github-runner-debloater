@@ -41,9 +41,11 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 | `enable_npm` | `false` | Keep npm and npx (**requires `enable_node: 'true'`**) |
 | `enable_corepack` | `false` | Keep Corepack (**requires `enable_node: 'true'`**) |
 | `enable_yarn` | `false` | Keep Yarn (**requires `enable_node: 'true'`**) |
-| `enable_c` | `false` | Keep C headers (`/usr/include`) |
-| `enable_cpp` | `false` | Keep C++ compiler/frontend and headers (**requires `enable_c: 'true'` and `enable_gcc: 'true'`**) |
-| `enable_gcc` | `false` | Keep GCC compiler toolchain |
+| `enable_c` | `false` | Keep C headers (`/usr/include`; requires `enable_gcc: 'true'` or `enable_llvm: 'true'`) |
+| `enable_cpp` | `false` | Keep C++ headers (`/usr/include/c++`; requires `enable_c: 'true'` and either `enable_gpp: 'true'` or `enable_llvm: 'true'`) |
+| `enable_gcc` | `false` | Keep GCC C compiler driver and coverage tools |
+| `enable_gpp` | `false` | Keep G++ C++ compiler driver/frontend |
+| `enable_cmake` | `false` | Keep CMake tools (`cmake`, `ctest`, `cpack`) |
 | `enable_python` | `false` | Keep base Python toolchain cache — **root for all Python add-ons below** |
 | `enable_miniconda` | `false` | Keep Miniconda (**requires `enable_python: 'true'`**) |
 | `enable_pipx` | `false` | Keep pipx (**requires `enable_python: 'true'`**) |
@@ -81,7 +83,8 @@ GitHub action input IDs can only contain alphanumeric characters, hyphens, and u
 | Input | Requires |
 |---|---|
 | `enable_cpp: 'true'` | `enable_c: 'true'` |
-| `enable_cpp: 'true'` | `enable_gcc: 'true'` |
+| `enable_c: 'true'` | `enable_gcc: 'true'` or `enable_llvm: 'true'` |
+| `enable_cpp: 'true'` | `enable_gpp: 'true'` or `enable_llvm: 'true'` |
 | `enable_npm: 'true'` | `enable_node: 'true'` |
 | `enable_corepack: 'true'` | `enable_node: 'true'` |
 | `enable_yarn: 'true'` | `enable_node: 'true'` |
@@ -103,8 +106,11 @@ Chromium is a Google product and its tooling lives inside
 Error: enable_cpp=true requires enable_c=true.
 The C++ toolchain depends on the base C headers.
 
-Error: enable_cpp=true requires enable_gcc=true.
-The C++ compiler frontend depends on GCC internals.
+Error: enable_c=true requires enable_gcc=true or enable_llvm=true.
+C builds need a compiler toolchain.
+
+Error: enable_cpp=true requires enable_gpp=true or enable_llvm=true.
+C++ builds need a C++ compiler toolchain.
 
 Error: enable_npm=true requires enable_node=true.
 npm and npx are Node.js package-management tools.
@@ -122,7 +128,8 @@ npm and npx are Node.js package-management tools.
     enable_c: 'true'
     enable_cpp: 'true'
     enable_gcc: 'true'
-    enable_llvm: 'true'
+    enable_gpp: 'true'
+    enable_cmake: 'true'
 ```
 
 ### C project
@@ -139,6 +146,28 @@ npm and npx are Node.js package-management tools.
 - uses: bsmithcompsci/github-runner-debloater@v1
   with:
     enable_gcc: 'true'
+```
+
+### G++ project
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_c: 'true'
+    enable_cpp: 'true'
+    enable_gcc: 'true'
+    enable_gpp: 'true'
+```
+
+### LLVM C/C++ project
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_llvm: 'true'
+    enable_c: 'true'
+    enable_cpp: 'true'
+    enable_cmake: 'true'
 ```
 
 ### Node.js project

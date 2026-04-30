@@ -37,7 +37,15 @@ inputs:
     required: false
     default: 'false'
   enable_gcc:
-    description: 'Keep GCC compiler toolchain (/usr/bin/gcc*, /usr/lib/gcc)'
+    description: 'Keep GCC C compiler driver and coverage tools (/usr/bin/gcc*, /usr/bin/gcov*)'
+    required: false
+    default: 'false'
+  enable_gpp:
+    description: 'Keep G++ C++ compiler driver/frontend (/usr/bin/g++*, cc1plus)'
+    required: false
+    default: 'false'
+  enable_cmake:
+    description: 'Keep CMake tools (cmake, ctest, cpack, /usr/share/cmake*)'
     required: false
     default: 'false'
   enable_node:
@@ -57,11 +65,11 @@ inputs:
     required: false
     default: 'false'
   enable_c:
-    description: 'Keep C headers (/usr/include). Required by enable_cpp.'
+    description: 'Keep C headers (/usr/include). Requires enable_gcc=true or enable_llvm=true.'
     required: false
     default: 'false'
   enable_cpp:
-    description: 'Keep C++ compiler/frontend and headers (g++, /usr/include/c++). REQUIRES enable_c=true and enable_gcc=true.'
+    description: 'Keep C++ headers (/usr/include/c++). REQUIRES enable_c=true and either enable_gpp=true or enable_llvm=true.'
     required: false
     default: 'false'
   enable_python:
@@ -185,8 +193,13 @@ runs:
           ERROR=1
         fi
 
-        if [[ "${{ inputs.enable_cpp }}" == "true" && "${{ inputs.enable_gcc }}" != "true" ]]; then
-          echo "::error::enable_cpp=true requires enable_gcc=true. The C++ compiler frontend depends on GCC internals."
+        if [[ "${{ inputs.enable_c }}" == "true" && "${{ inputs.enable_gcc }}" != "true" && "${{ inputs.enable_llvm }}" != "true" ]]; then
+          echo "::error::enable_c=true requires enable_gcc=true or enable_llvm=true. C builds need a compiler toolchain."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_cpp }}" == "true" && "${{ inputs.enable_gpp }}" != "true" && "${{ inputs.enable_llvm }}" != "true" ]]; then
+          echo "::error::enable_cpp=true requires enable_gpp=true or enable_llvm=true. C++ builds need a C++ compiler toolchain."
           ERROR=1
         fi
 
@@ -290,12 +303,16 @@ runs:
       shell: bash
       run: sudo rm -rf /usr/local/julia*
 
-    - name: Remove C++ compiler/frontend and headers
+    - name: Remove C++ headers
       if: inputs.enable_cpp != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/include/c++ 2>/dev/null || true
+
+    - name: Remove G++ compiler frontend
+      if: inputs.enable_gpp != 'true'
       shell: bash
       run: |
         sudo rm -rf /usr/bin/g++* /usr/bin/c++ /usr/bin/*-linux-gnu-g++* /usr/bin/*-linux-gnu-c++ 2>/dev/null || true
-        sudo rm -rf /usr/include/c++ 2>/dev/null || true
         sudo find /usr/lib/gcc -name cc1plus -delete 2>/dev/null || true
 
     - name: Remove C headers
@@ -303,13 +320,26 @@ runs:
       shell: bash
       run: sudo rm -rf /usr/include 2>/dev/null || true
 
-    - name: Remove GCC compiler toolchain
+    - name: Remove GCC C compiler driver
       if: inputs.enable_gcc != 'true'
       shell: bash
       run: |
         sudo rm -rf /usr/bin/gcc* /usr/bin/cc /usr/bin/gcov* 2>/dev/null || true
         sudo rm -rf /usr/bin/*-linux-gnu-gcc* /usr/bin/*-linux-gnu-gcov* 2>/dev/null || true
+
+    - name: Remove GCC shared compiler internals
+      if: inputs.enable_gcc != 'true' && inputs.enable_gpp != 'true' && inputs.enable_llvm != 'true'
+      shell: bash
+      run: |
         sudo rm -rf /usr/lib/gcc 2>/dev/null || true
+
+    - name: Remove CMake
+      if: inputs.enable_cmake != 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/bin/cmake /usr/local/bin/ctest /usr/local/bin/cpack 2>/dev/null || true
+        sudo rm -rf /usr/bin/cmake /usr/bin/ctest /usr/bin/cpack 2>/dev/null || true
+        sudo rm -rf /usr/local/share/cmake* /usr/share/cmake* 2>/dev/null || true
 
     - name: Remove base Python toolchain cache
       if: inputs.enable_python != 'true'

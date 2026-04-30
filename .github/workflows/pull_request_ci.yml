@@ -70,6 +70,14 @@ jobs:
           assert_removed '/usr/bin/gcov*'
           assert_removed '/usr/lib/gcc'
           assert_removed '/usr/include'
+          assert_removed '/usr/bin/cmake'
+          assert_removed '/usr/bin/ctest'
+          assert_removed '/usr/bin/cpack'
+          assert_removed '/usr/local/bin/cmake'
+          assert_removed '/usr/local/bin/ctest'
+          assert_removed '/usr/local/bin/cpack'
+          assert_removed '/usr/share/cmake*'
+          assert_removed '/usr/local/share/cmake*'
           assert_removed '/opt/hostedtoolcache/Python'
           assert_removed '/usr/share/miniconda'
           assert_removed '/opt/pipx'
@@ -253,6 +261,32 @@ jobs:
       - name: Verify Java is still available
         run: java -version
 
+  # Cross-dependency error: C without GCC or LLVM.
+  test-c-requires-compiler:
+    name: 'Test: C without GCC or LLVM must fail'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (c=true, gcc=false, llvm=false) - expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_c: 'true'
+          enable_gcc: 'false'
+          enable_llvm: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_c=true without GCC or LLVM, but it succeeded."
+            exit 1
+          fi
+          echo "Dependency check correctly rejected c without gcc or llvm"
+
   # Cross-dependency error: C++ without C.
   test-cpp-requires-c:
     name: 'Test: C++ without C must fail'
@@ -269,7 +303,7 @@ jobs:
         with:
           enable_cpp: 'true'
           enable_c: 'false'
-          enable_gcc: 'true'
+          enable_gpp: 'true'
 
       - name: Assert the action correctly rejected the invalid combination
         run: |
@@ -279,31 +313,33 @@ jobs:
           fi
           echo "Dependency check correctly rejected c++ without c"
 
-  # Cross-dependency error: C++ without GCC.
-  test-cpp-requires-gcc:
-    name: 'Test: C++ without GCC must fail'
+  # Cross-dependency error: C++ without G++ or LLVM.
+  test-cpp-requires-gpp:
+    name: 'Test: C++ without G++ or LLVM must fail'
     needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run debloater (cpp=true, gcc=false) - expected to fail
+      - name: Run debloater (cpp=true, gpp=false, llvm=false) - expected to fail
         id: debloat
         continue-on-error: true
         uses: ./
         with:
           enable_cpp: 'true'
           enable_c: 'true'
-          enable_gcc: 'false'
+          enable_gcc: 'true'
+          enable_gpp: 'false'
+          enable_llvm: 'false'
 
       - name: Assert the action correctly rejected the invalid combination
         run: |
           if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
-            echo "::error::Expected the action to fail when enable_cpp=true and enable_gcc=false, but it succeeded."
+            echo "::error::Expected the action to fail when enable_cpp=true without G++ or LLVM, but it succeeded."
             exit 1
           fi
-          echo "Dependency check correctly rejected c++ without gcc"
+          echo "Dependency check correctly rejected c++ without g++ or llvm"
 
   # Cross-dependency error: npm without Node.js.
   test-npm-requires-node:
@@ -346,6 +382,40 @@ jobs:
 
       - name: Verify GCC is still available
         run: gcc --version
+
+  # Scenario: G++ project.
+  test-gpp-project:
+    name: 'Test: G++ project (keep g++)'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping G++
+        uses: ./
+        with:
+          enable_gpp: 'true'
+
+      - name: Verify G++ is still available
+        run: g++ --version
+
+  # Scenario: CMake project.
+  test-cmake-project:
+    name: 'Test: CMake project (keep cmake)'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping CMake
+        uses: ./
+        with:
+          enable_cmake: 'true'
+
+      - name: Verify CMake is still available
+        run: cmake --version
 
   # Cross-dependency error: Chromium without Google.
   test-chromium-requires-google:
