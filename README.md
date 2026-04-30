@@ -56,7 +56,8 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 | `enable_postgresql` | `false` | Keep PostgreSQL data directory (`/var/lib/postgresql`) |
 | `enable_mecab` | `false` | Keep MeCab data (`/var/lib/mecab`) |
 | `enable_apt_cache` | `false` | Keep apt package cache (when false, runs `apt-get clean` to clear `/var/cache/apt`) |
-| `verbose` | `false` | Print detailed per-directory disk usage (depth 5) before and after cleanup. A freed-space summary is always printed. |
+| `verbose` | `false` | Print detailed per-directory disk usage before and after cleanup. A freed-space summary is always printed. |
+| `verbose-depth` | `2` | Directory depth for verbose disk usage reports. |
 
 ---
 
@@ -159,7 +160,7 @@ After a full cleanup (all defaults) the action is expected to leave at least **1
 |---|---|---|
 | [`monthly_runner_size_check.yml`](.github/workflows/monthly_runner_size_check.yml) | Monthly + manual | Run full cleanup on `ubuntu-latest`; upload before/after disk reports; flag baseline drift |
 | [`pull_request_ci.yml`](.github/workflows/pull_request_ci.yml) | PR → `main` | Validate action with actionlint; run scenario tests; enforce disk-space baseline |
-| [`release_ci.yml`](.github/workflows/release_ci.yml) | Push → `main` | Auto-bump semver patch tag; create a GitHub Release |
+| [`release_ci.yml`](.github/workflows/release_ci.yml) | Push → `main` | Release when `action.yml` changes; move major/minor tags; create patch and moving-tag GitHub Releases |
 
 ---
 
