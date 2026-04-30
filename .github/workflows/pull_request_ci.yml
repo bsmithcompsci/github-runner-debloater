@@ -516,3 +516,89 @@ jobs:
             exit 1
           fi
           echo "Dependency check correctly rejected pypy without python"
+
+  # Container job smoke test
+  test-container:
+    name: 'Test: Container job'
+    needs: validate
+    runs-on: ubuntu-latest
+    container:
+      image: node:20-bookworm
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add sudo shim for root container
+        run: |
+          if ! command -v sudo >/dev/null 2>&1; then
+            printf '#!/usr/bin/env bash\nexec "$@"\n' > /usr/local/bin/sudo
+            chmod +x /usr/local/bin/sudo
+          fi
+
+      - name: Create container cleanup fixtures
+        run: |
+          mkdir -p \
+            /usr/share/dotnet \
+            /opt/hostedtoolcache/node \
+            /opt/hostedtoolcache/Python \
+            /usr/share/miniconda \
+            /opt/google
+
+      - name: Run debloater with all defaults inside container
+        uses: ./
+        with:
+          verbose: 'true'
+          verbose-depth: '5'
+
+      - name: Verify default container cleanup
+        run: |
+          REMAINING=0
+
+          assert_removed() {
+            local path="$1"
+
+            if [ -e "${path}" ]; then
+              echo "::error::Expected ${path} to be removed inside the container, but it still exists."
+              REMAINING=1
+            else
+              echo "Removed in container: ${path}"
+            fi
+          }
+
+          assert_removed /usr/share/dotnet
+          assert_removed /opt/hostedtoolcache/node
+          assert_removed /opt/hostedtoolcache/Python
+          assert_removed /usr/share/miniconda
+          assert_removed /opt/google
+
+          if [ "${REMAINING}" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Recreate keep-node container fixtures
+        run: |
+          mkdir -p \
+            /usr/share/dotnet \
+            /opt/hostedtoolcache/node
+
+      - name: Run debloater keeping Node.js inside container
+        uses: ./
+        with:
+          enable_node: 'true'
+          verbose: 'true'
+          verbose-depth: '5'
+
+      - name: Verify container keep behavior
+        run: |
+          if [ ! -d /opt/hostedtoolcache/node ]; then
+            echo "::error::Expected /opt/hostedtoolcache/node to be kept inside the container."
+            exit 1
+          fi
+
+          if [ -e /usr/share/dotnet ]; then
+            echo "::error::Expected /usr/share/dotnet to be removed inside the container."
+            exit 1
+          fi
+
+          echo "Container keep-node scenario passed"
