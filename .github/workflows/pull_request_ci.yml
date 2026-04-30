@@ -158,6 +158,7 @@ jobs:
   # ── 6. Scenario: Rust project ────────────────────────────────────────────
   test-rust-project:
     name: 'Test: Rust project (keep rust)'
+    needs: test-minimal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
