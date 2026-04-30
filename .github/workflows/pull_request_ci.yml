@@ -155,7 +155,25 @@ jobs:
       - name: Verify Go is still available
         run: go version
 
-  # ── 6. Scenario: .NET project ────────────────────────────────────────────
+  # ── 6. Scenario: Rust project ────────────────────────────────────────────
+  test-rust-project:
+    name: 'Test: Rust project (keep rust)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Rust
+        uses: ./
+        with:
+          enable_rust: 'true'
+
+      - name: Verify Rust is still available
+        run: |
+          rustc --version
+          cargo --version
+
+  # ── 7. Scenario: .NET project ────────────────────────────────────────────
   test-dotnet-project:
     name: 'Test: .NET project (keep dotnet)'
     needs: test-minimal
@@ -172,7 +190,7 @@ jobs:
       - name: Verify .NET is still available
         run: dotnet --version
 
-  # ── 7. Scenario: Ruby project ────────────────────────────────────────────
+  # ── 8. Scenario: Ruby project ────────────────────────────────────────────
   test-ruby-project:
     name: 'Test: Ruby project (keep ruby)'
     needs: test-minimal
@@ -189,7 +207,7 @@ jobs:
       - name: Verify Ruby is still available
         run: ruby --version
 
-  # ── 8. Scenario: Java project ────────────────────────────────────────────
+  # ── 9. Scenario: Java project ────────────────────────────────────────────
   test-java-project:
     name: 'Test: Java project (keep java)'
     needs: test-minimal
@@ -206,7 +224,7 @@ jobs:
       - name: Verify Java is still available
         run: java -version
 
-  # ── 9. Cross-dependency error: chromium without google ───────────────────
+  # ── 10. Cross-dependency error: chromium without google ──────────────────
   test-chromium-requires-google:
     name: 'Test: Chromium without Google must fail'
     needs: test-minimal
@@ -231,7 +249,7 @@ jobs:
           fi
           echo "✅ Dependency check correctly rejected chromium without google"
 
-  # ── 10. Cross-dependency error: miniconda without python ─────────────────
+  # ── 11. Cross-dependency error: miniconda without python ─────────────────
   test-miniconda-requires-python:
     name: 'Test: Miniconda without Python must fail'
     needs: test-minimal
@@ -256,7 +274,7 @@ jobs:
           fi
           echo "✅ Dependency check correctly rejected miniconda without python"
 
-  # ── 11. Cross-dependency error: pipx without python ──────────────────────
+  # ── 12. Cross-dependency error: pipx without python ──────────────────────
   test-pipx-requires-python:
     name: 'Test: pipx without Python must fail'
     needs: test-minimal
@@ -281,7 +299,7 @@ jobs:
           fi
           echo "✅ Dependency check correctly rejected pipx without python"
 
-  # ── 12. Cross-dependency error: pypy without python ──────────────────────
+  # ── 13. Cross-dependency error: pypy without python ──────────────────────
   test-pypy-requires-python:
     name: 'Test: PyPy without Python must fail'
     needs: test-minimal
