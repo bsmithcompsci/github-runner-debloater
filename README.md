@@ -41,8 +41,9 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 | `enable_npm` | `false` | Keep npm and npx (**requires `enable_node: 'true'`**) |
 | `enable_corepack` | `false` | Keep Corepack (**requires `enable_node: 'true'`**) |
 | `enable_yarn` | `false` | Keep Yarn (**requires `enable_node: 'true'`**) |
-| `enable_c` | `false` | Keep C compiler/toolchain files (gcc, `/usr/lib/gcc`, `/usr/include`) |
-| `enable_cpp` | `false` | Keep C++ compiler/frontend and headers (**requires `enable_c: 'true'`**) |
+| `enable_c` | `false` | Keep C headers (`/usr/include`) |
+| `enable_cpp` | `false` | Keep C++ compiler/frontend and headers (**requires `enable_c: 'true'` and `enable_gcc: 'true'`**) |
+| `enable_gcc` | `false` | Keep GCC compiler toolchain |
 | `enable_python` | `false` | Keep base Python toolchain cache — **root for all Python add-ons below** |
 | `enable_miniconda` | `false` | Keep Miniconda (**requires `enable_python: 'true'`**) |
 | `enable_pipx` | `false` | Keep pipx (**requires `enable_python: 'true'`**) |
@@ -80,6 +81,7 @@ GitHub action input IDs can only contain alphanumeric characters, hyphens, and u
 | Input | Requires |
 |---|---|
 | `enable_cpp: 'true'` | `enable_c: 'true'` |
+| `enable_cpp: 'true'` | `enable_gcc: 'true'` |
 | `enable_npm: 'true'` | `enable_node: 'true'` |
 | `enable_corepack: 'true'` | `enable_node: 'true'` |
 | `enable_yarn: 'true'` | `enable_node: 'true'` |
@@ -99,7 +101,10 @@ Chromium is a Google product and its tooling lives inside
 /opt/google and /usr/lib/google-cloud-sdk.
 
 Error: enable_cpp=true requires enable_c=true.
-The C++ toolchain depends on the base C compiler/toolchain files.
+The C++ toolchain depends on the base C headers.
+
+Error: enable_cpp=true requires enable_gcc=true.
+The C++ compiler frontend depends on GCC internals.
 
 Error: enable_npm=true requires enable_node=true.
 npm and npx are Node.js package-management tools.
@@ -116,6 +121,7 @@ npm and npx are Node.js package-management tools.
   with:
     enable_c: 'true'
     enable_cpp: 'true'
+    enable_gcc: 'true'
     enable_llvm: 'true'
 ```
 
@@ -125,6 +131,14 @@ npm and npx are Node.js package-management tools.
 - uses: bsmithcompsci/github-runner-debloater@v1
   with:
     enable_c: 'true'
+```
+
+### GCC project
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_gcc: 'true'
 ```
 
 ### Node.js project

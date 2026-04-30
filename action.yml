@@ -28,6 +28,10 @@ inputs:
     description: 'Keep Java JVM (/usr/lib/jvm)'
     required: false
     default: 'false'
+  enable_gcc:
+    description: 'Keep GCC compiler toolchain (/usr/bin/gcc*, /usr/lib/gcc)'
+    required: false
+    default: 'false'
   enable_node:
     description: 'Keep Node.js runtime (/opt/hostedtoolcache/node, /usr/local/bin/node). Required by enable_npm, enable_corepack, and enable_yarn.'
     required: false
@@ -45,11 +49,11 @@ inputs:
     required: false
     default: 'false'
   enable_c:
-    description: 'Keep C compiler/toolchain files (gcc, /usr/lib/gcc, /usr/include). Required by enable_cpp.'
+    description: 'Keep C headers (/usr/include). Required by enable_cpp.'
     required: false
     default: 'false'
   enable_cpp:
-    description: 'Keep C++ compiler/frontend and headers (g++, /usr/include/c++). REQUIRES enable_c=true.'
+    description: 'Keep C++ compiler/frontend and headers (g++, /usr/include/c++). REQUIRES enable_c=true and enable_gcc=true.'
     required: false
     default: 'false'
   enable_python:
@@ -177,7 +181,12 @@ runs:
         fi
 
         if [[ "${{ inputs.enable_cpp }}" == "true" && "${{ inputs.enable_c }}" != "true" ]]; then
-          echo "::error::enable_cpp=true requires enable_c=true. The C++ toolchain depends on the base C compiler/toolchain files."
+          echo "::error::enable_cpp=true requires enable_c=true. The C++ toolchain depends on the base C headers."
+          ERROR=1
+        fi
+
+        if [[ "${{ inputs.enable_cpp }}" == "true" && "${{ inputs.enable_gcc }}" != "true" ]]; then
+          echo "::error::enable_cpp=true requires enable_gcc=true. The C++ compiler frontend depends on GCC internals."
           ERROR=1
         fi
 
@@ -289,14 +298,18 @@ runs:
         sudo rm -rf /usr/include/c++ 2>/dev/null || true
         sudo find /usr/lib/gcc -name cc1plus -delete 2>/dev/null || true
 
-    - name: Remove C compiler/toolchain files
+    - name: Remove C headers
       if: inputs.enable_c != 'true'
       shell: bash
+      run: sudo rm -rf /usr/include 2>/dev/null || true
+
+    - name: Remove GCC compiler toolchain
+      if: inputs.enable_gcc != 'true'
+      shell: bash
       run: |
-        sudo rm -rf /usr/bin/gcc* /usr/bin/cc /usr/bin/c89 /usr/bin/c99 /usr/bin/cpp* 2>/dev/null || true
-        sudo rm -rf /usr/bin/*-linux-gnu-gcc* /usr/bin/*-linux-gnu-cpp* 2>/dev/null || true
+        sudo rm -rf /usr/bin/gcc* /usr/bin/cc /usr/bin/gcov* 2>/dev/null || true
+        sudo rm -rf /usr/bin/*-linux-gnu-gcc* /usr/bin/*-linux-gnu-gcov* 2>/dev/null || true
         sudo rm -rf /usr/lib/gcc 2>/dev/null || true
-        sudo rm -rf /usr/include 2>/dev/null || true
 
     - name: Remove base Python toolchain cache
       if: inputs.enable_python != 'true'

@@ -67,6 +67,7 @@ jobs:
           assert_removed '/usr/local/julia*'
           assert_removed '/usr/bin/g++*'
           assert_removed '/usr/bin/gcc*'
+          assert_removed '/usr/bin/gcov*'
           assert_removed '/usr/lib/gcc'
           assert_removed '/usr/include'
           assert_removed '/opt/hostedtoolcache/Python'
@@ -268,6 +269,7 @@ jobs:
         with:
           enable_cpp: 'true'
           enable_c: 'false'
+          enable_gcc: 'true'
 
       - name: Assert the action correctly rejected the invalid combination
         run: |
@@ -276,6 +278,32 @@ jobs:
             exit 1
           fi
           echo "Dependency check correctly rejected c++ without c"
+
+  # Cross-dependency error: C++ without GCC.
+  test-cpp-requires-gcc:
+    name: 'Test: C++ without GCC must fail'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (cpp=true, gcc=false) - expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_cpp: 'true'
+          enable_c: 'true'
+          enable_gcc: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_cpp=true and enable_gcc=false, but it succeeded."
+            exit 1
+          fi
+          echo "Dependency check correctly rejected c++ without gcc"
 
   # Cross-dependency error: npm without Node.js.
   test-npm-requires-node:
@@ -301,6 +329,23 @@ jobs:
             exit 1
           fi
           echo "Dependency check correctly rejected npm without node"
+
+  # Scenario: GCC project.
+  test-gcc-project:
+    name: 'Test: GCC project (keep gcc)'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping GCC
+        uses: ./
+        with:
+          enable_gcc: 'true'
+
+      - name: Verify GCC is still available
+        run: gcc --version
 
   # Cross-dependency error: Chromium without Google.
   test-chromium-requires-google:
