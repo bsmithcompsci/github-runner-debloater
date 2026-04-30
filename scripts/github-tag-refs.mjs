@@ -244,6 +244,29 @@ async function main() {
     return;
   }
 
+  if (mode === "test-release-tags") {
+    console.log(`Testing release tag operations against ${owner}/${repo}`);
+    console.log(`Release tag: ${tag}`);
+    console.log(`Target SHA: ${sha}`);
+
+    const tagsToClean = [tag, ...floatingTagsFor(tag)];
+    for (const tagToClean of tagsToClean) {
+      await refs.deleteTagIfExists(tagToClean);
+    }
+
+    await refs.createTag(tag, sha);
+
+    for (const floatingTag of floatingTagsFor(tag)) {
+      await refs.deleteTagIfExists(floatingTag);
+      await refs.createTag(floatingTag, sha);
+    }
+
+    for (const tagToClean of tagsToClean) {
+      await refs.deleteTagIfExists(tagToClean);
+    }
+    return;
+  }
+
   throw new Error(`Unknown --mode ${mode}`);
 }
 
