@@ -5,12 +5,12 @@ on:
     branches:
       - main
 
-# Minimal permissions — jobs only need to checkout code.
+# Minimal permissions: jobs only need to checkout code.
 permissions:
   contents: read
 
 jobs:
-  # ── 1. Validate the action definition with actionlint ──────────────────────
+  # Validate the action definition with actionlint.
   validate:
     name: Validate Action (actionlint)
     runs-on: ubuntu-latest
@@ -26,7 +26,7 @@ jobs:
       - name: Run actionlint
         run: actionlint -color
 
-  # ── 2. Minimal cleanup — all defaults, remove everything ──────────────────
+  # Minimal cleanup: all defaults remove every supported tool.
   test-minimal:
     name: 'Test: Minimal (remove all)'
     needs: validate
@@ -65,6 +65,10 @@ jobs:
           assert_removed '/usr/local/share/powershell'
           assert_removed '/usr/local/share/chromium'
           assert_removed '/usr/local/julia*'
+          assert_removed '/usr/bin/g++*'
+          assert_removed '/usr/bin/gcc*'
+          assert_removed '/usr/lib/gcc'
+          assert_removed '/usr/include'
           assert_removed '/opt/hostedtoolcache/Python'
           assert_removed '/usr/share/miniconda'
           assert_removed '/opt/pipx'
@@ -77,11 +81,25 @@ jobs:
           assert_removed '/opt/hostedtoolcache/CodeQL'
           assert_removed '/opt/hostedtoolcache/go'
           assert_removed '/opt/hostedtoolcache/node'
+          assert_removed '/usr/local/bin/npm'
+          assert_removed '/usr/local/bin/npx'
+          assert_removed '/usr/local/bin/corepack'
+          assert_removed '/usr/local/bin/yarn'
+          assert_removed '/usr/local/bin/yarnpkg'
+          assert_removed '/usr/local/lib/node_modules/npm'
+          assert_removed '/usr/local/lib/node_modules/corepack'
+          assert_removed '/usr/local/include/node'
+          assert_removed '/opt/yarn-v*'
           assert_removed '/opt/hostedtoolcache/Ruby'
+          assert_removed '/usr/bin/perl*'
+          assert_removed '/usr/share/perl'
           assert_removed '/usr/lib/llvm-*'
           assert_removed '/var/lib/mysql'
           assert_removed '/var/lib/postgresql'
           assert_removed '/var/lib/mecab'
+          assert_removed '/usr/share/doc'
+          assert_removed '/usr/share/locale'
+          assert_removed '/usr/share/man'
 
           if [ "${REMAINING}" -ne 0 ]; then
             exit 1
@@ -101,11 +119,11 @@ jobs:
             echo "::error::Disk usage ${USED_GB} GB exceeds baseline maximum ${BASELINE_GB} GB"
             exit 1
           fi
-          echo "✅ Disk space check passed, Usage: ${USED_GB} GB <= ${BASELINE_GB} GB"
+          echo "Disk space check passed, Usage: ${USED_GB} GB <= ${BASELINE_GB} GB"
 
-  # ── 3. Scenario: Node.js project ─────────────────────────────────────────
+  # Scenario: Node.js runtime only.
   test-node-project:
-    name: 'Test: Node.js project (keep node)'
+    name: 'Test: Node.js project (keep node runtime only)'
     needs: test-minimal
     runs-on: ubuntu-latest
     steps:
@@ -120,7 +138,35 @@ jobs:
       - name: Verify Node.js is still available
         run: node --version
 
-  # ── 4. Scenario: Python project ──────────────────────────────────────────
+      - name: Verify npm is removed when not explicitly kept
+        run: |
+          if command -v npm >/dev/null 2>&1 || command -v npx >/dev/null 2>&1; then
+            echo "::error::Expected npm and npx to be removed unless enable_npm=true."
+            exit 1
+          fi
+
+  # Scenario: Node.js with npm and npx.
+  test-node-npm-project:
+    name: 'Test: Node.js project (keep node + npm)'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater keeping Node.js and npm
+        uses: ./
+        with:
+          enable_node: 'true'
+          enable_npm: 'true'
+
+      - name: Verify Node.js and npm are still available
+        run: |
+          node --version
+          npm --version
+          npx --version
+
+  # Scenario: Python project.
   test-python-project:
     name: 'Test: Python project (keep python + miniconda)'
     needs: test-minimal
@@ -138,7 +184,7 @@ jobs:
       - name: Verify Python is still available
         run: python3 --version
 
-  # ── 5. Scenario: Go project ──────────────────────────────────────────────
+  # Scenario: Go project.
   test-go-project:
     name: 'Test: Go project (keep go)'
     needs: test-minimal
@@ -155,7 +201,7 @@ jobs:
       - name: Verify Go is still available
         run: go version
 
-  # ── 6. Scenario: .NET project ────────────────────────────────────────────
+  # Scenario: .NET project.
   test-dotnet-project:
     name: 'Test: .NET project (keep dotnet)'
     needs: test-minimal
@@ -172,7 +218,7 @@ jobs:
       - name: Verify .NET is still available
         run: dotnet --version
 
-  # ── 7. Scenario: Ruby project ────────────────────────────────────────────
+  # Scenario: Ruby project.
   test-ruby-project:
     name: 'Test: Ruby project (keep ruby)'
     needs: test-minimal
@@ -189,7 +235,7 @@ jobs:
       - name: Verify Ruby is still available
         run: ruby --version
 
-  # ── 8. Scenario: Java project ────────────────────────────────────────────
+  # Scenario: Java project.
   test-java-project:
     name: 'Test: Java project (keep java)'
     needs: test-minimal
@@ -206,7 +252,57 @@ jobs:
       - name: Verify Java is still available
         run: java -version
 
-  # ── 9. Cross-dependency error: chromium without google ───────────────────
+  # Cross-dependency error: C++ without C.
+  test-cpp-requires-c:
+    name: 'Test: C++ without C must fail'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (cpp=true, c=false) - expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_cpp: 'true'
+          enable_c: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_cpp=true and enable_c=false, but it succeeded."
+            exit 1
+          fi
+          echo "Dependency check correctly rejected c++ without c"
+
+  # Cross-dependency error: npm without Node.js.
+  test-npm-requires-node:
+    name: 'Test: npm without Node.js must fail'
+    needs: test-minimal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run debloater (npm=true, node=false) - expected to fail
+        id: debloat
+        continue-on-error: true
+        uses: ./
+        with:
+          enable_npm: 'true'
+          enable_node: 'false'
+
+      - name: Assert the action correctly rejected the invalid combination
+        run: |
+          if [ "${{ steps.debloat.outcome }}" != "failure" ]; then
+            echo "::error::Expected the action to fail when enable_npm=true and enable_node=false, but it succeeded."
+            exit 1
+          fi
+          echo "Dependency check correctly rejected npm without node"
+
+  # Cross-dependency error: Chromium without Google.
   test-chromium-requires-google:
     name: 'Test: Chromium without Google must fail'
     needs: test-minimal
@@ -215,7 +311,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run debloater (chromium=true, google=false) — expected to fail
+      - name: Run debloater (chromium=true, google=false) - expected to fail
         id: debloat
         continue-on-error: true
         uses: ./
@@ -229,9 +325,9 @@ jobs:
             echo "::error::Expected the action to fail when enable_chromium=true and enable_google=false, but it succeeded."
             exit 1
           fi
-          echo "✅ Dependency check correctly rejected chromium without google"
+          echo "Dependency check correctly rejected chromium without google"
 
-  # ── 10. Cross-dependency error: miniconda without python ─────────────────
+  # Cross-dependency error: Miniconda without Python.
   test-miniconda-requires-python:
     name: 'Test: Miniconda without Python must fail'
     needs: test-minimal
@@ -240,7 +336,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run debloater (miniconda=true, python=false) — expected to fail
+      - name: Run debloater (miniconda=true, python=false) - expected to fail
         id: debloat
         continue-on-error: true
         uses: ./
@@ -254,9 +350,9 @@ jobs:
             echo "::error::Expected the action to fail when enable_miniconda=true and enable_python=false, but it succeeded."
             exit 1
           fi
-          echo "✅ Dependency check correctly rejected miniconda without python"
+          echo "Dependency check correctly rejected miniconda without python"
 
-  # ── 11. Cross-dependency error: pipx without python ──────────────────────
+  # Cross-dependency error: pipx without Python.
   test-pipx-requires-python:
     name: 'Test: pipx without Python must fail'
     needs: test-minimal
@@ -265,7 +361,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run debloater (pipx=true, python=false) — expected to fail
+      - name: Run debloater (pipx=true, python=false) - expected to fail
         id: debloat
         continue-on-error: true
         uses: ./
@@ -279,9 +375,9 @@ jobs:
             echo "::error::Expected the action to fail when enable_pipx=true and enable_python=false, but it succeeded."
             exit 1
           fi
-          echo "✅ Dependency check correctly rejected pipx without python"
+          echo "Dependency check correctly rejected pipx without python"
 
-  # ── 12. Cross-dependency error: pypy without python ──────────────────────
+  # Cross-dependency error: PyPy without Python.
   test-pypy-requires-python:
     name: 'Test: PyPy without Python must fail'
     needs: test-minimal
@@ -290,7 +386,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run debloater (pypy=true, python=false) — expected to fail
+      - name: Run debloater (pypy=true, python=false) - expected to fail
         id: debloat
         continue-on-error: true
         uses: ./
@@ -304,5 +400,90 @@ jobs:
             echo "::error::Expected the action to fail when enable_pypy=true and enable_python=false, but it succeeded."
             exit 1
           fi
-          echo "✅ Dependency check correctly rejected pypy without python"
+          echo "Dependency check correctly rejected pypy without python"
 
+  # Container job smoke test.
+  test-container:
+    name: 'Test: Container job'
+    needs: validate
+    runs-on: ubuntu-latest
+    container:
+      image: node:20-bookworm
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add sudo shim for root container
+        run: |
+          if ! command -v sudo >/dev/null 2>&1; then
+            printf '#!/usr/bin/env bash\nexec "$@"\n' > /usr/local/bin/sudo
+            chmod +x /usr/local/bin/sudo
+          fi
+
+      - name: Create container cleanup fixtures
+        run: |
+          mkdir -p \
+            /usr/share/dotnet \
+            /opt/hostedtoolcache/node \
+            /opt/hostedtoolcache/Python \
+            /usr/share/miniconda \
+            /opt/google
+
+      - name: Run debloater with all defaults inside container
+        uses: ./
+        with:
+          verbose: 'true'
+          verbose-depth: '5'
+
+      - name: Verify default container cleanup
+        run: |
+          REMAINING=0
+
+          assert_removed() {
+            local path="$1"
+
+            if [ -e "${path}" ]; then
+              echo "::error::Expected ${path} to be removed inside the container, but it still exists."
+              REMAINING=1
+            else
+              echo "Removed in container: ${path}"
+            fi
+          }
+
+          assert_removed /usr/share/dotnet
+          assert_removed /opt/hostedtoolcache/node
+          assert_removed /opt/hostedtoolcache/Python
+          assert_removed /usr/share/miniconda
+          assert_removed /opt/google
+
+          if [ "${REMAINING}" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Recreate keep-node container fixtures
+        run: |
+          mkdir -p \
+            /usr/share/dotnet \
+            /opt/hostedtoolcache/node
+
+      - name: Run debloater keeping Node.js inside container
+        uses: ./
+        with:
+          enable_node: 'true'
+          verbose: 'true'
+          verbose-depth: '5'
+
+      - name: Verify container keep behavior
+        run: |
+          if [ ! -d /opt/hostedtoolcache/node ]; then
+            echo "::error::Expected /opt/hostedtoolcache/node to be kept inside the container."
+            exit 1
+          fi
+
+          if [ -e /usr/share/dotnet ]; then
+            echo "::error::Expected /usr/share/dotnet to be removed inside the container."
+            exit 1
+          fi
+
+          echo "Container keep-node scenario passed"

@@ -15,7 +15,7 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 - name: Free up disk space
   uses: bsmithcompsci/github-runner-debloater@v1
   with:
-    enable_node: 'true'   # keep Node.js; remove everything else
+    enable_node: 'true'   # keep Node.js runtime; remove everything else
 ```
 
 ### All defaults (maximum cleanup)
@@ -37,12 +37,18 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 | `enable_ghc` | `false` | Keep GHC Haskell compiler (ghc, ghcup) |
 | `enable_swift` | `false` | Keep Swift compiler |
 | `enable_java` | `false` | Keep Java JVM |
-| `enable_node` | `false` | Keep Node.js |
+| `enable_node` | `false` | Keep Node.js runtime — **root for Node package-manager tools below** |
+| `enable_npm` | `false` | Keep npm and npx (**requires `enable_node: 'true'`**) |
+| `enable_corepack` | `false` | Keep Corepack (**requires `enable_node: 'true'`**) |
+| `enable_yarn` | `false` | Keep Yarn (**requires `enable_node: 'true'`**) |
+| `enable_c` | `false` | Keep C compiler/toolchain files (gcc, `/usr/lib/gcc`, `/usr/include`) |
+| `enable_cpp` | `false` | Keep C++ compiler/frontend and headers (**requires `enable_c: 'true'`**) |
 | `enable_python` | `false` | Keep base Python toolchain cache — **root for all Python add-ons below** |
 | `enable_miniconda` | `false` | Keep Miniconda (**requires `enable_python: 'true'`**) |
 | `enable_pipx` | `false` | Keep pipx (**requires `enable_python: 'true'`**) |
 | `enable_pypy` | `false` | Keep PyPy runtime (**requires `enable_python: 'true'`**) |
 | `enable_ruby` | `false` | Keep Ruby |
+| `enable_perl` | `false` | Keep Perl runtime and libraries |
 | `enable_go` | `false` | Keep Go toolchain |
 | `enable_google` | `false` | Keep Google tools (Google Cloud SDK, /opt/google) — **root for Chromium** |
 | `enable_chromium` | `false` | Keep Chromium browser (**requires `enable_google: 'true'`**) |
@@ -57,6 +63,9 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 | `enable_postgresql` | `false` | Keep PostgreSQL data directory (`/var/lib/postgresql`) |
 | `enable_mecab` | `false` | Keep MeCab data (`/var/lib/mecab`) |
 | `enable_apt_cache` | `false` | Keep apt package cache (when false, runs `apt-get clean` to clear `/var/cache/apt`) |
+| `enable_docs` | `false` | Keep package documentation (`/usr/share/doc`) |
+| `enable_locales` | `false` | Keep translation/localization files (`/usr/share/locale`) |
+| `enable_manpages` | `false` | Keep manual pages (`/usr/share/man`) |
 | `verbose` | `false` | Print detailed per-directory disk usage before and after cleanup. A freed-space summary is always printed. |
 | `verbose-depth` | `2` | Directory depth for verbose disk usage reports. |
 
@@ -66,8 +75,14 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 
 Some tools depend on others being present on the runner. The action validates inputs before performing any removal and exits with a descriptive error if a violation is detected.
 
+GitHub action input IDs can only contain alphanumeric characters, hyphens, and underscores, so the C++ switch is named `enable_cpp`.
+
 | Input | Requires |
 |---|---|
+| `enable_cpp: 'true'` | `enable_c: 'true'` |
+| `enable_npm: 'true'` | `enable_node: 'true'` |
+| `enable_corepack: 'true'` | `enable_node: 'true'` |
+| `enable_yarn: 'true'` | `enable_node: 'true'` |
 | `enable_miniconda: 'true'` | `enable_python: 'true'` |
 | `enable_pipx: 'true'` | `enable_python: 'true'` |
 | `enable_pypy: 'true'` | `enable_python: 'true'` |
@@ -82,6 +97,12 @@ Miniconda is a Python distribution and depends on the base Python toolchain.
 Error: enable_chromium=true requires enable_google=true.
 Chromium is a Google product and its tooling lives inside
 /opt/google and /usr/lib/google-cloud-sdk.
+
+Error: enable_cpp=true requires enable_c=true.
+The C++ toolchain depends on the base C compiler/toolchain files.
+
+Error: enable_npm=true requires enable_node=true.
+npm and npx are Node.js package-management tools.
 ```
 
 ---
@@ -93,7 +114,17 @@ Chromium is a Google product and its tooling lives inside
 ```yaml
 - uses: bsmithcompsci/github-runner-debloater@v1
   with:
+    enable_c: 'true'
+    enable_cpp: 'true'
     enable_llvm: 'true'
+```
+
+### C project
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_c: 'true'
 ```
 
 ### Node.js project
@@ -102,6 +133,16 @@ Chromium is a Google product and its tooling lives inside
 - uses: bsmithcompsci/github-runner-debloater@v1
   with:
     enable_node: 'true'
+```
+
+### Node.js project with npm and Corepack
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_node: 'true'
+    enable_npm: 'true'
+    enable_corepack: 'true'
 ```
 
 ### Python project (base only)
