@@ -62,6 +62,10 @@ inputs:
     description: 'Keep Go (/opt/hostedtoolcache/go)'
     required: false
     default: 'false'
+  enable_rust:
+    description: 'Keep Rust toolchain cache (~/.cargo, ~/.rustup)'
+    required: false
+    default: 'false'
   enable_google:
     description: 'Keep Google tools: Google Cloud SDK, /opt/google (/usr/lib/google-cloud-sdk, /opt/google)'
     required: false
@@ -271,6 +275,13 @@ runs:
       if: inputs.enable_go != 'true'
       shell: bash
       run: sudo rm -rf /opt/hostedtoolcache/go
+
+    - name: Remove Rust toolchain cache
+      if: inputs.enable_rust != 'true'
+      shell: bash
+      run: |
+        rm -rf "${HOME}/.cargo"
+        rm -rf "${HOME}/.rustup"
 
     - name: Remove Node.js toolchain cache
       if: inputs.enable_node != 'true'

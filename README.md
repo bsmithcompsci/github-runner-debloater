@@ -44,6 +44,7 @@ Note, this is definitely a band-aid fix to your issue. A lot of this can be avoi
 | `enable_pypy` | `false` | Keep PyPy runtime (**requires `enable_python: 'true'`**) |
 | `enable_ruby` | `false` | Keep Ruby |
 | `enable_go` | `false` | Keep Go toolchain |
+| `enable_rust` | `false` | Keep Rust toolchain cache (`~/.cargo`, `~/.rustup`) |
 | `enable_google` | `false` | Keep Google tools (Google Cloud SDK, /opt/google) — **root for Chromium** |
 | `enable_chromium` | `false` | Keep Chromium browser (**requires `enable_google: 'true'`**) |
 | `enable_microsoft` | `false` | Keep Microsoft tools (/opt/microsoft) |
@@ -128,6 +129,14 @@ Chromium is a Google product and its tooling lives inside
 - uses: bsmithcompsci/github-runner-debloater@v1
   with:
     enable_go: 'true'
+```
+
+### Rust project
+
+```yaml
+- uses: bsmithcompsci/github-runner-debloater@v1
+  with:
+    enable_rust: 'true'
 ```
 
 ### .NET project
