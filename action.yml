@@ -8,6 +8,14 @@ branding:
   color: 'red'
 
 inputs:
+  verbose:
+    description: 'When true, print detailed disk usage reports before and after cleanup.'
+    required: false
+    default: 'false'
+  verbose-depth:
+    description: 'When verbose=true, set the depth for the disk usage report (default: 2).'
+    required: false
+    default: '2'
   enable_dotnet:
     description: 'Keep .NET SDK/runtime (/usr/share/dotnet)'
     required: false
@@ -156,14 +164,6 @@ inputs:
     description: 'Keep manual pages (/usr/share/man)'
     required: false
     default: 'false'
-  verbose:
-    description: 'When true, print detailed disk usage reports before and after cleanup.'
-    required: false
-    default: 'false'
-  verbose-depth:
-    description: 'When verbose=true, set the depth for the disk usage report (default: 2).'
-    required: false
-    default: '2'
 
 runs:
   using: 'composite'
